@@ -1,0 +1,15 @@
+{
+  "name": "personal-pi-extensions",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run build && vitest run",
+    "test:sdk": "npm run build && node packages/pi-collaboration/tests/sdk.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
