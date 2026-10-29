@@ -1,0 +1,22 @@
+{
+  "name": "@zijianchen/pi-collaboration",
+  "version": "0.1.1",
+  "private": true,
+  "description": "PI协作 — explicit local collaboration for ordinary Pi sessions",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "engines": { "node": ">=22" },
+  "bin": { "pi-collab": "./cli.mjs" },
+  "pi": { "extensions": ["./extension.mjs"] },
+  "exports": {
+    "./service": { "types": "./dist/service.d.ts", "import": "./dist/service.js", "default": "./dist/service.js" },
+    "./protocol": { "types": "./dist/protocol.d.ts", "import": "./dist/protocol.js", "default": "./dist/protocol.js" },
+    "./extension": "./extension.mjs",
+    "./deckz-extension": "./deckz-extension.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": ["extension.mjs", "deckz-extension.mjs", "extension-factory.mjs", "cli.mjs", "broker.mjs", "dist", "README.md"],
+  "peerDependencies": { "@earendil-works/pi-ai": "*" },
+  "peerDependenciesMeta": { "@earendil-works/pi-ai": { "optional": true } },
+  "scripts": { "build": "tsc -p tsconfig.json", "prepack": "npm run build" }
+}
