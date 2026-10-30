@@ -33,6 +33,7 @@
 详见：
 
 - [字段与语义契约](./01-contract.md)
+- [RPC 宿主采集接入契约](./02-rpc-integration.md)（仅插件接口，不实现宿主或数据消费）
 - [完整合成 JSON](../../packages/pi-work-insights/examples/observation.json)
 - [合法空 JSON](../../packages/pi-work-insights/examples/empty-observation.json)
 - [JSON Schema](../../packages/pi-work-insights/schema/observation.schema.json)

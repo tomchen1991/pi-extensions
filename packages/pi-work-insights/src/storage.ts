@@ -153,10 +153,12 @@ export class ObservationStore {
     try { return fn(); } finally { fs.closeSync(fd); fs.unlinkSync(lock); }
   }
   private save(settings: Settings): void { atomic(path.join(this.directory, "settings.json"), SettingsSchema.parse(settings)); }
-  authorize(destination: Destination, confirmed: boolean): void {
+  authorize(destination: Destination, confirmed: boolean, expectedRevision?: string): void {
     if (!confirmed) throw new Error("CONSENT_REQUIRED");
     this.locked(() => {
       const settings = this.settings();
+      // A dialog opened before another instance paused/forgot must not restore its old grant.
+      if (expectedRevision !== undefined && settings.revision !== expectedRevision) throw new Error("NOT_AUTHORIZED");
       this.save({ ...settings, destination: DestinationSchema.parse(destination), revision: randomUUID(), enabled: true });
     });
   }

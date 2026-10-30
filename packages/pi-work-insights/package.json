@@ -14,7 +14,8 @@
     "schema": "node dist/scripts/schema.js",
     "examples": "node dist/scripts/examples.js",
     "inspect": "node dist/scripts/inspect.js",
-    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs"
+    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs",
+    "test:rpc": "npm run build && node scripts/rpc-smoke.mjs"
   },
   "dependencies": { "zod": "4.6.7" }
 }

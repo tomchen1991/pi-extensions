@@ -67,7 +67,7 @@ pi list
 
 `pi install` 会修改个人 Pi 的包配置；不要把它当成测试准备步骤。移除时使用 `pi remove <source>`，其中 source 以 `pi list` 显示的配置为准。安装、重载和清除数据的细节见各插件 README；移除包不等于删除它已生成的数据。
 
-工作洞察默认输出到 `<Pi agentDir>/work-insights/projects/<projectRef>/`，包含时间命名的 `observations/` 和 `latest.json` 指针；可通过 `/insights status` 查看实际位置。不要把真实输出放进本仓库，参考[输出契约](./docs/pi-work-insights/01-contract.md)。
+工作洞察默认输出到 `<Pi agentDir>/work-insights/projects/<projectRef>/`，包含时间命名的 `observations/` 和 `latest.json` 指针；可通过 `/insights status` 查看实际位置。不要把真实输出放进本仓库，参考[输出契约](./docs/pi-work-insights/01-contract.md)。Desk 等 RPC 宿主须先接入[确认与状态协议](./docs/pi-work-insights/02-rpc-integration.md)，显式传 `--work-insights-rpc`；该能力开关不是用户采集授权。
 
 ## 仓库结构
 
@@ -117,8 +117,11 @@ PI_COLLAB_TEST_MODE=deckz npm run test:sdk
 # 下一句建议的加载器和编辑器冒烟
 node packages/pi-next-prompt/sdk-test.mjs
 
-# 工作洞察的加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
+# 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
+
+# 工作洞察的真实 RPC 子进程/确认协议；假 provider，约75秒（含60秒超时）
+npm run test:rpc --workspace=pi-work-insights
 ```
 
 SDK 冒烟不等于真实模型效果验收。真实试用、benchmark 或模型质量评估须另行明确授权，不能混入默认测试流程。
