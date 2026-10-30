@@ -1,0 +1,20 @@
+{
+  "name": "pi-work-insights",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Automatic structured work observations from Pi sessions: work, decisions, open loops, and preference signals",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./src/extension.ts"] },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
+  "devDependencies": { "@earendil-works/pi-coding-agent": "1.4.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test",
+    "schema": "node dist/scripts/schema.js",
+    "examples": "node dist/scripts/examples.js",
+    "inspect": "node dist/scripts/inspect.js",
+    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs"
+  },
+  "dependencies": { "zod": "4.6.7" }
+}

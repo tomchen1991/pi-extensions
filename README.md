@@ -4,6 +4,8 @@
 
 ## 插件
 
+- [PI 工作洞察](packages/pi-work-insights/README.md)：授权后自动输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短证据引用的 JSON；不负责画像、推荐或后端使用。
+
 - [下一句自动建议](packages/pi-next-prompt/README.md)：DeepSeek Flash 单次生成下一句提示词，输入框灰字展示，Tab 接受，输入即消失。
 
 - [PI协作](packages/pi-collaboration/README.md)：普通 PI 会话间显式加入、同组发现、点对点消息与回执。

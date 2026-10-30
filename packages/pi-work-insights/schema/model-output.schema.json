@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "recentWork": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "in_progress",
+              "blocked",
+              "reported_done",
+              "unknown"
+            ]
+          },
+          "verification": {
+            "type": "string",
+            "enum": [
+              "user_reported",
+              "assistant_reported",
+              "tool_observed",
+              "unknown"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "topic",
+          "goal",
+          "context",
+          "progress",
+          "status",
+          "verification",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "decisions": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "workRef": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "task",
+              "project"
+            ]
+          },
+          "temporary": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "workRef",
+          "choice",
+          "reason",
+          "scope",
+          "temporary",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openLoops": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "workRef": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "unfinished",
+              "pending_validation",
+              "blocked",
+              "waiting_for_user",
+              "next_step"
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "user_explicit",
+              "assistant_proposed",
+              "inferred"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "workRef",
+          "description",
+          "kind",
+          "origin",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "preferenceSignals": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "prompting",
+              "collaboration",
+              "workflow"
+            ]
+          },
+          "aspect": {
+            "type": "string",
+            "enum": [
+              "input_style",
+              "response_detail",
+              "response_format",
+              "execution_order",
+              "change_scope",
+              "confirmation_boundary",
+              "verification_style",
+              "tooling",
+              "other"
+            ]
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "task",
+              "project",
+              "user_candidate"
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "explicit_statement",
+              "observed_pattern"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "aspect",
+          "condition",
+          "preference",
+          "scope",
+          "basis",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "entryRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "id",
+          "entryRef",
+          "quote"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "recentWork",
+    "decisions",
+    "openLoops",
+    "preferenceSignals",
+    "evidence"
+  ],
+  "additionalProperties": false
+}
