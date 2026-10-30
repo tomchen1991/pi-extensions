@@ -28,15 +28,45 @@ async function launcher(source?: string) {
   child.stderr.on('data', chunk => { err += chunk; });
   return { child, exit, broker, socketPath, out: () => out, err: () => err };
 }
+const STARTUP_TIMEOUT_MS = 5000;
+const PROCESS_TEST_TIMEOUT_MS = 10000;
+
+// Node + launcher + faux Pi can approach/exceed expect.poll's default 1s on a cold/busy host.
+// Wait for the actual readiness marker, but fail immediately if the launcher exits first.
+function waitForReady(run: Awaited<ReturnType<typeof launcher>>, timeoutMs = STARTUP_TIMEOUT_MS): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const diagnostics = () => `code=${run.child.exitCode}, signal=${run.child.signalCode}, ` +
+      `stdout=${JSON.stringify(run.out().slice(-2000))}, stderr=${JSON.stringify(run.err().slice(-2000))}`;
+    const cleanup = () => {
+      clearTimeout(timer);
+      run.child.stdout.off('data', check);
+      run.child.off('close', closed);
+      run.child.off('error', failed);
+    };
+    const check = () => {
+      if (run.out().split(/\r?\n/).includes('READY')) { cleanup(); resolve(); }
+    };
+    const closed = () => { cleanup(); reject(new Error(`Launcher exited before READY: ${diagnostics()}`)); };
+    const failed = (error: Error) => { cleanup(); reject(new Error(`Launcher failed before READY: ${error.message}; ${diagnostics()}`)); };
+    const timer = setTimeout(() => {
+      cleanup(); reject(new Error(`Timed out waiting for READY after ${timeoutMs}ms: ${diagnostics()}`));
+    }, timeoutMs);
+    run.child.stdout.on('data', check);
+    run.child.once('close', closed);
+    run.child.once('error', failed);
+    if (run.child.exitCode !== null || run.child.signalCode !== null) closed();
+    else check(); // READY may already have arrived before this waiter was registered.
+  });
+}
 const waitSource = `setInterval(() => {}, 1000); console.log('READY');`;
 it.each([['SIGINT', 130], ['SIGTERM', 143]] as const)('forwards %s and exits %i', async (signal, code) => {
   const run = await launcher(waitSource);
-  await expect.poll(run.out).toContain('READY');
+  await waitForReady(run);
   run.child.kill(signal);
   expect((await run.exit)[0]).toBe(code);
   const next = await joinBroker({ group: 'team', name: 'test', project: 'app' }, run.socketPath);
   next.socket.destroy();
-});
+}, PROCESS_TEST_TIMEOUT_MS);
 it('spawn failure cleans up the control connection and exits without hanging', async () => {
   const run = await launcher();
   expect((await run.exit)[0]).toBe(1);
@@ -46,10 +76,36 @@ it('spawn failure cleans up the control connection and exits without hanging', a
 });
 it('broker disconnect warns without killing the active Pi', async () => {
   const run = await launcher(waitSource);
-  await expect.poll(run.out).toContain('READY');
+  await waitForReady(run);
   await run.broker.close();
   await expect.poll(run.err).toContain('连接已断开');
   expect(run.child.exitCode).toBeNull();
   run.child.kill('SIGTERM');
   expect((await run.exit)[0]).toBe(143);
-});
+}, PROCESS_TEST_TIMEOUT_MS);
+
+it('allows a real child to become ready after the old one-second polling limit', async () => {
+  const run = await launcher(`setInterval(() => {}, 1000); setTimeout(() => console.log('READY'), 1200);`);
+  await waitForReady(run);
+  run.child.kill('SIGTERM');
+  expect((await run.exit)[0]).toBe(143);
+}, PROCESS_TEST_TIMEOUT_MS);
+
+it('reports an early exit with stdout and stderr rather than waiting for the startup deadline', async () => {
+  const run = await launcher(`console.log('starting'); console.error('synthetic startup failure'); process.exitCode = 23;`);
+  const error = await waitForReady(run).catch(error => error);
+  expect(error).toBeInstanceOf(Error);
+  expect(error.message).toContain('Launcher exited before READY');
+  expect(error.message).toContain('code=23');
+  expect(error.message).toContain('starting');
+  expect(error.message).toContain('synthetic startup failure');
+  expect((await run.exit)[0]).toBe(23);
+}, PROCESS_TEST_TIMEOUT_MS);
+
+it('still times out with diagnostics when a running child never reports READY', async () => {
+  const run = await launcher(`setInterval(() => {}, 1000); console.log('BOOTED');`);
+  await expect.poll(run.out, { timeout: STARTUP_TIMEOUT_MS }).toContain('BOOTED');
+  await expect(waitForReady(run, 50)).rejects.toThrow(/Timed out waiting for READY after 50ms:.*BOOTED/);
+  run.child.kill('SIGTERM');
+  expect((await run.exit)[0]).toBe(143);
+}, PROCESS_TEST_TIMEOUT_MS);
