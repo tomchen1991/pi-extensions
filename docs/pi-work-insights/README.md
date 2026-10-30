@@ -2,7 +2,7 @@
 
 ## 已确认的职责
 
-从 PI 当前授权会话自动提取：
+从 PI 当前授权会话自动提取；Cocoon 的 DeckZ / Desk 用户 Pi 采用宿主自动策略，无确认弹窗，普通 Pi 保留确认授权策略：
 
 1. 用户最近的工作内容、目标、背景、进展。
 2. 用户明确作出的选择与理由。
@@ -33,7 +33,7 @@
 详见：
 
 - [字段与语义契约](./01-contract.md)
-- [RPC 宿主采集接入契约](./02-rpc-integration.md)（仅插件接口，不实现宿主或数据消费）
+- [DeckZ TUI / Desk RPC 宿主采集接入契约](./02-rpc-integration.md)（仅插件接口，不实现宿主或数据消费）
 - [完整合成 JSON](../../packages/pi-work-insights/examples/observation.json)
 - [合法空 JSON](../../packages/pi-work-insights/examples/empty-observation.json)
 - [JSON Schema](../../packages/pi-work-insights/schema/observation.schema.json)
@@ -41,7 +41,8 @@
 
 ## 本轮完成标准
 
-- 一次明确授权后，正常任务结束并空闲时自动提取，不要求用户逐条确认。
+- DeckZ / Desk 用户 Pi 由宿主显式自动策略启动采集、无确认弹窗；不扩到协作会话、长线任务工人或 QA。普通 Pi 保留首次确认。正常任务结束并空闲时自动提取，不要求用户逐条确认。
+- 暂停/清除持久生效，宿主自动启动也不覆盖；只在用户显式恢复时重新开启。
 - 实际输出可通过运行时 Schema、引用和跨字段校验；坏结果不发布。
 - 用户开始新任务时让路，旧会话/授权的迟到结果不发布。
 - 成功的相同输入不重复请求；请求数、输入/输出和磁盘使用有上限。

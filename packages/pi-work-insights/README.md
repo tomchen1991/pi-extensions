@@ -23,7 +23,17 @@
 
 所有输出都是 `reviewStatus: "unreviewed"`。**授权自动采集不等于用户逐条确认了模型结论。** 不知道的原因/条件等填 `null`，没有线索则返回空数组；不强行生成习惯。
 
-## 启动与授权
+## 启动与采集策略
+
+### Cocoon：DeckZ / Desk 用户 Pi 自动采集
+
+宿主只在 DeckZ 的用户 Pi（TUI）和 Desk 的用户聊天 Pi（RPC）传入 `-e <扩展入口> --work-insights-auto`，并仅为这些进程指定绝对 `PI_WORK_INSIGHTS_DIR`。插件首次空闲时自动绑定当前模型并开启采集，**无需 enable、不弹开启或清除确认**，可能产生模型费用。协作会话、长线任务工人和 QA 不在范围内，不加载该配置。
+
+`pause` / `forget` 持久停用，重启不会覆盖；恢复或模型配置变化后，用 `/insights enable` 显式恢复/重绑，自动模式仍无弹窗。`forget` 在此模式立即删除本项目观察并暂停，只能由用户明确操作触发。宿主应提供非阻塞的外发/费用说明及暂停、清除、状态入口。不修改 Pi 个人 settings，不通过自动回复旧确认来模拟新模式。
+
+RPC 自动模式无需 `--work-insights-rpc` 或确认响应 UI，但须接 notify/setStatus 和状态查询。具体启动、状态与模型绑定见 [宿主接入契约](../../docs/pi-work-insights/02-rpc-integration.md)。
+
+### 普通 Pi：仍先明确授权
 
 在仓库根目录：
 
@@ -40,21 +50,21 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 
 一次确认会展示项目、固定提取模型、配置端点、外发范围、请求额度和输出目录。开启后无需每次手动提取或逐条确认。切换主 Agent 模型不会悄悄切换提取模型；更换提取模型请重新 `enable`。
 
-无既有授权时默认不开启；项目授权跨会话生效。已验证 Pi **1.4.0** 的 TUI 和显式接入的 RPC 模式；JSON、print 及未带能力开关的 RPC 不采集、不请求模型。没有安装到个人 Pi，也没有读取真实会话或进行真实模型质量验收。
+不带自动标志的普通 Pi，无既有授权时默认不开启；项目授权跨会话生效。已验证 Pi **1.4.0** 的 TUI 和显式接入的 RPC（含宿主自动模式）；JSON、print 及未带任何接入标志的 RPC 不采集、不请求模型。没有安装到个人 Pi，也没有读取真实会话或进行真实模型质量验收。
 
-### RPC 宿主（Desk 等）
+### 可选的普通 RPC 确认模式
 
 宿主实现 Pi 原生 `extension_ui_request` / `extension_ui_response` 确认与状态展示后，使用 `pi --mode rpc -e <扩展入口> --work-insights-rpc`，并仅为该进程设置绝对路径 `PI_WORK_INSIGHTS_DIR`。能力开关不是采集授权，仍须通过 `/insights enable` 明确确认；已有同项目授权可恢复。确认60秒超时则拒绝，不能自动批准或直接写 settings。
 
-RPC 同样通过 `prompt` 发送 `/insights enable/pause/forget/status`；status 通过 notify 返回带版本的 JSON 状态。RPC 看不到宿主草稿，不能保证草稿编辑期间不提取。完整命令、状态字段、持久授权与宿主责任见 [RPC 接入契约](../../docs/pi-work-insights/02-rpc-integration.md)。
+RPC 同样通过 `prompt` 发送 `/insights enable/pause/forget/status`；status 通过 notify 返回带版本的 JSON 状态。RPC 看不到宿主草稿，不能保证草稿编辑期间不提取。这不是 Cocoon 当前的自动模式。完整命令、状态字段、持久授权与宿主责任见 [宿主接入契约](../../docs/pi-work-insights/02-rpc-integration.md)。
 
 | 命令 | 行为 |
 | --- | --- |
-| `/insights enable` | 授权当前项目、绑定当前模型并开启自动输出；跨会话生效 |
+| `/insights enable` | 绑定当前模型并开启/恢复输出；普通模式须确认，宿主自动模式不弹框；跨会话生效 |
 | `/insights status` | 查看授权、固定模型、输出目录、项目最新指针和取样时间；重载后也可查看，不取消正在进行的请求 |
 | `/insights extract` | 立即尝试一次，仍遵守授权、去重和预算 |
 | `/insights pause` | 取消本实例任务并持久暂停，阻止其他实例发布旧结果 |
-| `/insights forget` | 经确认删除本项目观察 JSON、撤销旧请求并暂停 |
+| `/insights forget` | 删除本项目观察 JSON、撤销旧请求并暂停；普通模式须确认，宿主自动模式立即执行 |
 | `/insights cancel` | 仅取消当前定时/请求；后续新任务结束仍可触发自动观察 |
 
 旧 `learn` / `predict` / `list` 等命令已移除。旧习惯/审计实验数据不会被读取、自动迁移或由新 `forget` 删除。
@@ -69,7 +79,7 @@ RPC 同样通过 `prompt` 发送 `/insights enable/pause/forget/status`；status
 - 每次发送最近最多 **30条、16000字符**的可用文本；单条超过4000字符整条省略。超过窗口的旧内容不补发、不做完整历史增量回放。
 - 遵守 `context_edit` 删除与替换；排除思考、system prompt、图片、自动摘要、注入消息和任意工具日志。仅允许按 toolCallId 关联的极短 bash 测试计数；文件正文、命令参数和嵌套工具内容不发送。
 - 原文进入模型前和结论输出前检查常见秘密。**过滤不完备**，不能当成保密保证；本地保存不等于本地推理。
-- 通过 Pi `modelRegistry` 的无工具独立请求提取，复用宿主认证。授权绑定 provider/model/配置路由指纹；配置变化需重新确认，实际服务端路由仍由 Pi/提供商控制。
+- 通过 Pi `modelRegistry` 的无工具独立请求提取，复用宿主认证。授权绑定 provider/model/配置路由指纹；配置变化需显式 enable 重绑（普通模式重新确认，自动模式不弹框），实际服务端路由仍由 Pi/提供商控制。
 - 不给主会话发送消息、不运行额外 agent、不占用输入框。usage 记入 JSON，并通过 TUI 状态栏或 RPC setStatus 显示；没有并入 Pi 主会话费用统计。
 
 ## 输出位置与语义
@@ -124,11 +134,12 @@ npm run examples --workspace=pi-work-insights
 npx vitest run packages/pi-work-insights/test
 PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:sdk --workspace=pi-work-insights
 PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:rpc --workspace=pi-work-insights
+PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:auto --workspace=pi-work-insights
 npm run inspect --workspace=pi-work-insights -- /absolute/path/to/observation.json
 # 或读取项目最新指针指向的正文
 npm run inspect --workspace=pi-work-insights -- /absolute/path/to/project/latest.json
 ```
 
-普通测试只使用合成文本、假模型和临时目录。SDK smoke 使用实际 Pi TypeScript 加载器和 SessionManager，等待真实10秒去抖，验证自动输出、引用来源、去重和清除，不调用真实模型。RPC smoke 启动真实 Pi 子进程，使用临时 HOME、合成消息及假 provider；包含真实60秒确认超时和10秒自动提取等待，验证拒绝、迟到确认、暂停撤销、持久授权恢复、门禁与清除，不请求网络。
+普通测试只使用合成文本、假模型和临时目录。SDK smoke 使用实际 Pi TypeScript 加载器和 SessionManager，等待真实10秒去抖，验证自动输出、引用来源、去重和清除，不调用真实模型。RPC smoke 启动真实 Pi 子进程，使用临时 HOME、合成消息及假 provider；包含真实60秒确认超时和10秒自动提取等待，验证拒绝、迟到确认、暂停撤销、持久授权恢复、门禁与清除，不请求网络。`test:auto` 另验证 TUI/RPC 自动开启、全程零弹窗、去重与暂停/清除后重启不复活。
 
 实现模块：`collector.ts` / `observation-input.ts` 采集，`contract.ts` 定义输出，`extractor.ts` 定义提取提示词和单次调用，`storage.ts` 写文件，`extension.ts` 连接事件与授权。没有新增依赖、数据库或后台服务。

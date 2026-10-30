@@ -10,7 +10,7 @@
 | --- | --- |
 | `schemaVersion` | 当前固定为字符串 `"0.1"` |
 | `observationId` | 当前项目、会话、有效输入摘要、提取版本和模型目的地的固定 SHA-256 标识 |
-| `reviewStatus` | 固定 `unreviewed`；项目授权不是对模型产物的逐条认可 |
+| `reviewStatus` | 固定 `unreviewed`；项目授权或宿主自动开启都不是对模型产物的逐条认可 |
 | `source.producer` | 固定 `pi-work-insights` |
 | `source.projectRef` | 本机 Git 根目录或非 Git cwd realpath 的摘要；不是全局仓库 ID |
 | `source.sessionRef` | 项目、Pi session ID 和宿主会话文件位置的组合摘要；允许内存会话 |

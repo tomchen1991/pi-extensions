@@ -8,7 +8,7 @@ AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动�
 
 | 插件 | 职责 | 开启方式与成本 |
 | --- | --- | --- |
-| [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 加载后默认不开启；`/insights enable` 授权项目及固定提取模型后自动工作，可能产生模型费用 |
+| [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 普通 Pi 默认关闭，须 `/insights enable`；Cocoon 用户 Pi 可由宿主用 `--work-insights-auto` 自动采集、无确认弹窗，可能产生模型费用 |
 | [下一句自动建议](./packages/pi-next-prompt/README.md) | 单次生成下一句提示词，输入框灰字展示，Tab 接受，不自动发送 | 加载后在正常回复结束时使用 `deepseek/deepseek-flash`，每次建议额外调用一次模型 |
 | [PI 协作](./packages/pi-collaboration/README.md) | 普通 Pi 会话显式加入、同组发现、点对点消息与回执；另有 DeckZ 兼容入口 | 启动本地 broker 并通过 CLI 显式加入；relay 本身不调用模型，但接收消息可能唤醒接收方主模型并产生费用 |
 
@@ -67,7 +67,7 @@ pi list
 
 `pi install` 会修改个人 Pi 的包配置；不要把它当成测试准备步骤。移除时使用 `pi remove <source>`，其中 source 以 `pi list` 显示的配置为准。安装、重载和清除数据的细节见各插件 README；移除包不等于删除它已生成的数据。
 
-工作洞察默认输出到 `<Pi agentDir>/work-insights/projects/<projectRef>/`，包含时间命名的 `observations/` 和 `latest.json` 指针；可通过 `/insights status` 查看实际位置。不要把真实输出放进本仓库，参考[输出契约](./docs/pi-work-insights/01-contract.md)。Desk 等 RPC 宿主须先接入[确认与状态协议](./docs/pi-work-insights/02-rpc-integration.md)，显式传 `--work-insights-rpc`；该能力开关不是用户采集授权。
+工作洞察默认输出到 `<Pi agentDir>/work-insights/projects/<projectRef>/`，包含时间命名的 `observations/` 和 `latest.json` 指针；可通过 `/insights status` 查看实际位置。不要把真实输出放进本仓库，参考[输出契约](./docs/pi-work-insights/01-contract.md)。DeckZ / Desk 用户 Pi 的[宿主接入契约](./docs/pi-work-insights/02-rpc-integration.md)使用 `--work-insights-auto` 自动采集、无确认弹窗；暂停/清除后不因重启恢复。协作、工人和 QA 不在范围内。普通 RPC 另保留 `--work-insights-rpc` 确认模式，两者不能混淆。
 
 ## 仓库结构
 
@@ -122,6 +122,9 @@ npm run test:sdk --workspace=pi-work-insights
 
 # 工作洞察的真实 RPC 子进程/确认协议；假 provider，约75秒（含60秒超时）
 npm run test:rpc --workspace=pi-work-insights
+
+# 宿主自动模式 TUI/RPC 冒烟：零确认弹窗，假 provider
+npm run test:auto --workspace=pi-work-insights
 ```
 
 SDK 冒烟不等于真实模型效果验收。真实试用、benchmark 或模型质量评估须另行明确授权，不能混入默认测试流程。

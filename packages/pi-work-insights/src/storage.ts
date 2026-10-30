@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Hash, validateObservation, type Observation } from "./contract.js";
-import { defaultSettings, DestinationSchema, HOUR_MS, HOURLY_REQUEST_LIMIT, MIN_INTERVAL_MS, SettingsSchema, type Destination, type Settings } from "./config.js";
+import { defaultSettings, DestinationSchema, INITIAL_REVISION, HOUR_MS, HOURLY_REQUEST_LIMIT, MIN_INTERVAL_MS, SettingsSchema, type Destination, type Settings } from "./config.js";
 import { digest } from "./identity.js";
 
 const MAX_FILE = 128 * 1024;
@@ -160,6 +160,17 @@ export class ObservationStore {
       // A dialog opened before another instance paused/forgot must not restore its old grant.
       if (expectedRevision !== undefined && settings.revision !== expectedRevision) throw new Error("NOT_AUTHORIZED");
       this.save({ ...settings, destination: DestinationSchema.parse(destination), revision: randomUUID(), enabled: true });
+    });
+  }
+  /** Host automatic mode initializes only a never-configured project, under the same revocation lock. */
+  initializeAutomatic(destination: Destination): Settings {
+    return this.locked(() => {
+      const settings = this.settings();
+      // Pause/forget always rotate revision, including before the first automatic run.
+      if (settings.revision !== INITIAL_REVISION || settings.enabled || settings.destination) return settings;
+      const initialized = { ...settings, destination: DestinationSchema.parse(destination), revision: randomUUID(), enabled: true };
+      this.save(initialized);
+      return initialized;
     });
   }
   pause(): void {
