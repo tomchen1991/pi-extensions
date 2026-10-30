@@ -17,6 +17,10 @@ const ERRORS: Record<string, string> = {
 };
 
 export default function (pi: ExtensionAPI) {
+  // Host capability opt-in, not user consent. Never enables collection by itself.
+  pi.registerFlag("work-insights-rpc", { description: "宿主已接入工作洞察 RPC 确认与状态 UI（仍须 /insights enable 授权）", type: "boolean", default: false });
+  const supported = (ctx: ExtensionContext) => ctx.mode === "tui" ||
+    (ctx.mode === "rpc" && ctx.hasUI && pi.getFlag("work-insights-rpc") === true);
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: AbortController | undefined;
@@ -31,7 +35,8 @@ export default function (pi: ExtensionAPI) {
     lastState = text;
     ctx.ui.setStatus("work-insights", visible ? `工作洞察：${text}` : undefined);
   };
-  const idle = (ctx: ExtensionContext) => ctx.mode === "tui" && ctx.isIdle() && !ctx.hasPendingMessages() && !ctx.ui.getEditorText().trim();
+  const idle = (ctx: ExtensionContext) => supported(ctx) && ctx.isIdle() && !ctx.hasPendingMessages() &&
+    (ctx.mode === "rpc" || !ctx.ui.getEditorText().trim());
   const errorStatus = (ctx: ExtensionContext, error: unknown) => {
     // Never echo raw provider errors, invalid JSON, conversation fragments or credentials.
     status(ctx, ERRORS[error instanceof Error ? error.message : ""] ?? "提取未完成：请检查模型配置、输出格式或本地文件；未保存当前结果");
@@ -41,7 +46,7 @@ export default function (pi: ExtensionAPI) {
     destinationFor(model, ctx.modelRegistry.getRegisteredProviderConfig(model.provider));
 
   function schedule(ctx: ExtensionContext, delay = DEBOUNCE_MS) {
-    if (ctx.mode !== "tui" || timer || active) return;
+    if (!supported(ctx) || timer || active) return;
     const expected = generation;
     timer = setTimeout(() => { timer = undefined; void run(ctx, expected); }, delay);
   }
@@ -109,7 +114,7 @@ export default function (pi: ExtensionAPI) {
 
   const invalidate = (_event: unknown, ctx: ExtensionContext) => {
     cancel();
-    if (ctx.mode === "tui") status(ctx, "等待下一次空闲", false);
+    if (supported(ctx)) status(ctx, "等待下一次空闲", false);
   };
   pi.on("input", invalidate);
   pi.on("before_agent_start", invalidate);
@@ -128,7 +133,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("insights", {
     description: "自动输出最近工作、决策、未闭环事项与偏好线索 JSON（首次须授权）",
     handler: async (args, ctx) => {
-      if (ctx.mode !== "tui") { ctx.ui.notify("工作洞察首版仅支持 TUI；其他模式不采集、不调用模型", "warning"); return; }
+      if (!supported(ctx)) { ctx.ui.notify("工作洞察仅支持 TUI 或显式 --work-insights-rpc 接入；当前模式不采集、不调用模型", "warning"); return; }
       const action = args.trim() || "status";
       // A status query must not cancel (and waste) an in-flight paid request.
       if (action === "status") {
@@ -139,6 +144,15 @@ export default function (pi: ExtensionAPI) {
           const store = storeFor(root);
           const settings = store.settings();
           const latest = store.latest();
+          if (ctx.mode === "rpc") {
+            ctx.ui.notify(JSON.stringify({ type: "work_insights_status", version: 1,
+              projectRef: store.projectRef, enabled: settings.enabled, state: lastState,
+              scheduled: timer !== undefined, active: active !== undefined,
+              model: settings.destination ? { provider: settings.destination.provider, id: settings.destination.model } : null,
+              outputDirectory: store.outputDirectory, latestFile: store.latestFile, latest: latest ?? null,
+            }), "info");
+            return;
+          }
           ctx.ui.notify(`工作洞察：${settings.enabled ? "自动模式" : "未开启/已暂停"}\n项目：${root}\n` +
             `模型：${settings.destination ? `${settings.destination.provider}/${settings.destination.model}` : "未授权"}\n` +
             `输出：${store.outputDirectory}\n最新入口：${store.latestFile}\n` +
@@ -171,22 +185,23 @@ export default function (pi: ExtensionAPI) {
         if (action === "pause") {
           store.pause(); status(ctx, "已暂停", false);
         } else if (action === "forget") {
-          if (await ctx.ui.confirm("清除本项目观察 JSON？", "删除本插件的工作观察输出并暂停。不会删除 Pi 原会话，也不能撤回已发送的模型请求。", { signal: controller.signal })) {
+          if (await ctx.ui.confirm("清除本项目观察 JSON？", "删除本插件的工作观察输出并暂停。不会删除 Pi 原会话，也不能撤回已发送的模型请求。", { signal: controller.signal, timeout: ctx.mode === "rpc" ? 60_000 : undefined })) {
             if (!valid()) return;
             store.forget(); lastFile = undefined; status(ctx, "已清除并暂停", false);
           }
         } else {
           if (!idle(ctx) || !ctx.model) throw new Error("MODEL_UNAVAILABLE");
           const destination = configuredDestination(ctx, ctx.model);
+          const revision = store.settings().revision;
           const approved = await ctx.ui.confirm("开启本项目自动工作观察？",
             `项目：${root}\n固定提取模型：${destination.provider}/${destination.model}\n配置端点：${destination.endpoint}（实际路由和认证由 Pi 管理）\n` +
             "会在空闲后发送当前分支最近最多30条、16000字符的过滤文本，包含用户/助手文本及极少量测试计数。过滤不能识别全部秘密。\n" +
             "每次最多4096输出 tokens；至少间隔2分钟，每项目每小时最多6次。失败/取消也占请求额度，可能收费。\n" +
             "自动保存工作内容、决策、未闭环事项、偏好线索和短原话，不再逐条确认。不会生成画像、给出建议、上传 backend 或修改主会话。\n" +
-            `输出目录：${store.outputDirectory}\n授权在本项目跨会话生效；/insights pause 停止。`, { signal: controller.signal });
+            `输出目录：${store.outputDirectory}\n授权在本项目跨会话生效；/insights pause 停止。`, { signal: controller.signal, timeout: ctx.mode === "rpc" ? 60_000 : undefined });
           if (!approved || !valid()) return;
           if (!ctx.model || configuredDestination(ctx, ctx.model).fingerprint !== destination.fingerprint) throw new Error("DESTINATION_CHANGED");
-          store.authorize(destination, true);
+          store.authorize(destination, true, revision);
           status(ctx, "已开启，空闲后自动输出 JSON"); restart = true;
         }
       } catch (error) {

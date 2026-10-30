@@ -7,7 +7,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({ getAgentDir: () => { throw E
 import extension from "../src/extension.js";
 import { ObservationStore } from "../src/storage.js";
 import { DEBOUNCE_MS, MIN_INTERVAL_MS, REQUEST_TIMEOUT_MS } from "../src/config.js";
-import { branch, draft, entry, model } from "./fixtures/synthetic.js";
+import { branch, destination, draft, entry, model } from "./fixtures/synthetic.js";
 
 const dirs: string[] = [];
 const shutdowns: (() => void)[] = [];
@@ -16,13 +16,14 @@ afterEach(() => {
   vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks();
   dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true }));
 });
-function setup() {
+function setup(rpc = false) {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const cwd = realpathSync(mkdtempSync(path.join(os.tmpdir(), "pi-observation-extension-")));
   dirs.push(cwd); const base = path.join(cwd, "output"); vi.stubEnv("PI_WORK_INSIGHTS_DIR", base);
   const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
   let command!: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   const api = {
+    registerFlag: vi.fn(), getFlag: () => rpc,
     on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(event, handler),
     registerCommand: (name: string, value: { handler: typeof command }) => { expect(name).toBe("insights"); command = value.handler; },
   };
@@ -30,7 +31,7 @@ function setup() {
   const response = () => ({ stopReason: "stop", content: [{ type: "text", text: output }], usage: { input: 50, output: 50, totalTokens: 100 } });
   const rows = structuredClone(branch);
   const ctx = {
-    cwd, mode: "tui", isIdle: () => true, hasPendingMessages: () => false, model,
+    cwd, mode: rpc ? "rpc" : "tui", hasUI: true, isIdle: () => true, hasPendingMessages: () => false, model,
     sessionManager: {
       getSessionId: () => "synthetic-session", getSessionFile: () => path.join(cwd, "synthetic.jsonl"),
       getLeafId: () => rows.at(-1)!.id, getBranch: vi.fn(() => rows),
@@ -126,10 +127,69 @@ describe("automatic observation extension", () => {
   });
   it.each(["rpc", "json", "print"])("does not observe or request in %s mode", async mode => {
     const f = setup(); f.ctx.mode = mode;
+    f.store.authorize(destination, true); // An unsupported host must not restore a persisted grant.
     await f.run("enable"); f.emit("session_start"); f.emit("agent_settled", { aborted: false });
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
     expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
     expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it("RPC capability opt-in alone does not authorize; explicit consent enables the same outbox", async () => {
+    const f = setup(true);
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.run("status");
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+    expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+    expect(existsSync(f.store.directory)).toBe(false);
+    expect(JSON.parse(f.ctx.ui.notify.mock.calls.at(-1)![0])).toMatchObject({ type: "work_insights_status", version: 1, enabled: false, latest: null });
+    await f.run("enable"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.waitOutput();
+    expect(f.ctx.ui.confirm).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("可能收费"), expect.objectContaining({ timeout: 60_000 }));
+    expect(f.ctx.ui.getEditorText).not.toHaveBeenCalled(); // RPC cannot inspect host drafts.
+    await f.run("status");
+    expect(JSON.parse(f.ctx.ui.notify.mock.calls.at(-1)![0])).toMatchObject({ enabled: true, latest: { file: `observations/${f.outputs()[0]}` } });
+    await f.run("pause"); f.newInput(); await f.run("extract");
+    expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalledTimes(1);
+    await f.run("forget"); expect(f.outputs()).toEqual([]); expect(f.store.latest()).toBeUndefined();
+  });
+  it("RPC without UI cannot restore even an existing grant", async () => {
+    const f = setup(true); await f.run("enable"); f.emit("session_shutdown"); f.ctx.hasUI = false;
+    f.emit("session_start"); await f.run("extract"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it.each(["pause", "forget"])("a concurrent %s revokes an outstanding RPC consent dialog", async action => {
+    const f = setup(true);
+    let approve!: (value: boolean) => void;
+    f.ctx.ui.confirm.mockImplementation(() => new Promise(resolve => { approve = resolve; }));
+    const pending = f.run("enable");
+    await vi.waitFor(() => expect(f.ctx.ui.confirm).toHaveBeenCalled());
+    if (action === "pause") f.store.pause(); else f.store.forget();
+    approve(true); await pending;
+    expect(f.store.settings().enabled).toBe(false);
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it("RPC cancellation invalidates an outstanding consent even if the UI responds late", async () => {
+    const f = setup(true);
+    let approve!: (value: boolean) => void;
+    f.ctx.ui.confirm.mockImplementation(() => new Promise(resolve => { approve = resolve; }));
+    const pending = f.run("enable");
+    await vi.waitFor(() => expect(f.ctx.ui.confirm).toHaveBeenCalled());
+    await f.run("pause"); approve(true); await pending;
+    expect(f.store.settings().enabled).toBe(false);
+  });
+  it("RPC decline never authorizes or reads the branch", async () => {
+    const f = setup(true); f.ctx.ui.confirm.mockResolvedValue(false); await f.run("enable");
+    f.emit("agent_settled"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(existsSync(f.store.directory)).toBe(false);
+    expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+  });
+  it("RPC status does not cancel a paid request, and pause discards its late result", async () => {
+    const f = setup(true); await f.run("enable");
+    let resolve!: (value: ReturnType<typeof f.response>) => void;
+    f.ctx.modelRegistry.streamSimple.mockImplementation(() => ({ result: () => new Promise(done => { resolve = done; }) }));
+    const pending = f.run("extract");
+    await vi.waitFor(() => expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalled());
+    await f.run("status");
+    expect(JSON.parse(f.ctx.ui.notify.mock.calls.at(-1)![0])).toMatchObject({ enabled: true, active: true });
+    await f.run("pause"); await pending; resolve(f.response()); await Promise.resolve();
+    expect(f.outputs()).toEqual([]);
   });
   it("skips busy/queued/drafting states and aborted settlement", async () => {
     const f = setup(); await f.run("enable"); f.ctx.isIdle = () => false; await f.run("extract");
@@ -139,8 +199,8 @@ describe("automatic observation extension", () => {
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
     expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
   });
-  it.each(["input", "before_agent_start", "agent_start", "model_select", "session_tree", "session_compact", "session_shutdown"])("cancels on %s and discards a late response even from an uncancellable provider", async event => {
-    const f = setup(); await f.run("enable");
+  it.each([false, true].flatMap(rpc => ["input", "before_agent_start", "agent_start", "model_select", "session_tree", "session_compact", "session_shutdown"].map(event => ({ rpc, event }))))("cancels on $event (RPC=$rpc) and discards an uncancellable late response", async ({ rpc, event }) => {
+    const f = setup(rpc); await f.run("enable");
     let resolve!: (value: ReturnType<typeof f.response>) => void;
     f.ctx.modelRegistry.streamSimple.mockImplementation(() => ({ result: () => new Promise(done => { resolve = done; }) }));
     const pending = f.run("extract");

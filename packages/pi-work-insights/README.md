@@ -40,7 +40,13 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 
 一次确认会展示项目、固定提取模型、配置端点、外发范围、请求额度和输出目录。开启后无需每次手动提取或逐条确认。切换主 Agent 模型不会悄悄切换提取模型；更换提取模型请重新 `enable`。
 
-默认不开启。只验证 Pi **1.4.0** 的 TUI 模式；RPC、JSON、print 模式不采集、不请求模型。本轮没有安装到个人 Pi，也没有读取真实会话或进行真实模型质量验收。
+无既有授权时默认不开启；项目授权跨会话生效。已验证 Pi **1.4.0** 的 TUI 和显式接入的 RPC 模式；JSON、print 及未带能力开关的 RPC 不采集、不请求模型。没有安装到个人 Pi，也没有读取真实会话或进行真实模型质量验收。
+
+### RPC 宿主（Desk 等）
+
+宿主实现 Pi 原生 `extension_ui_request` / `extension_ui_response` 确认与状态展示后，使用 `pi --mode rpc -e <扩展入口> --work-insights-rpc`，并仅为该进程设置绝对路径 `PI_WORK_INSIGHTS_DIR`。能力开关不是采集授权，仍须通过 `/insights enable` 明确确认；已有同项目授权可恢复。确认60秒超时则拒绝，不能自动批准或直接写 settings。
+
+RPC 同样通过 `prompt` 发送 `/insights enable/pause/forget/status`；status 通过 notify 返回带版本的 JSON 状态。RPC 看不到宿主草稿，不能保证草稿编辑期间不提取。完整命令、状态字段、持久授权与宿主责任见 [RPC 接入契约](../../docs/pi-work-insights/02-rpc-integration.md)。
 
 | 命令 | 行为 |
 | --- | --- |
@@ -56,7 +62,7 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 ## 自动触发与边界
 
 - `session_start`、正常 `agent_settled`、切换会话树后等待 **10秒**；事件处理器立即返回，不阻塞主模型运行。
-- 执行前检查空闲、无排队任务、输入框无草稿。用户新输入、主任务启动、换模型、切树、压缩、关闭或重载会取消旧任务；迟到结果不能写入。
+- 执行前检查空闲、无排队任务，TUI 另检查输入框无草稿（RPC 无法读取宿主草稿）。用户新输入、主任务启动、换模型、切树、压缩、关闭或重载会取消旧任务；迟到结果不能写入。
 - 每项目请求间隔至少 **2分钟**，每滚动小时最多 **6次**，跨进程/重载保留额度。等待额度时保留一个可取消定时器；失败/取消也消耗请求额度。没有立即自动重试；后续事件或手动请求可以再次尝试。
 - 每次最多 **4096输出 tokens**、**45秒**超时。额度是逻辑请求数上限，不是精确金额上限；服务端可能在取消后继续运行和收费。
 - 只读当前活动分支，不扫描其他会话或仓库文件。只做有界 Git 根定位；非 Git 使用 cwd realpath，worktree 分开。
@@ -64,7 +70,7 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 - 遵守 `context_edit` 删除与替换；排除思考、system prompt、图片、自动摘要、注入消息和任意工具日志。仅允许按 toolCallId 关联的极短 bash 测试计数；文件正文、命令参数和嵌套工具内容不发送。
 - 原文进入模型前和结论输出前检查常见秘密。**过滤不完备**，不能当成保密保证；本地保存不等于本地推理。
 - 通过 Pi `modelRegistry` 的无工具独立请求提取，复用宿主认证。授权绑定 provider/model/配置路由指纹；配置变化需重新确认，实际服务端路由仍由 Pi/提供商控制。
-- 不给主会话发送消息、不运行额外 agent、不占用输入框。usage 记入 JSON，并在状态栏显示；没有并入 Pi 主会话费用统计。
+- 不给主会话发送消息、不运行额外 agent、不占用输入框。usage 记入 JSON，并通过 TUI 状态栏或 RPC setStatus 显示；没有并入 Pi 主会话费用统计。
 
 ## 输出位置与语义
 
@@ -104,7 +110,7 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 - 中断写入可能遗留 `.tmp`，它不是成功 JSON。`forget` 会清理本项目输出目录中的这些临时文件。
 - 请求完成但写文件前崩溃，后续可能重新付费提取；没有“恰好一次收费”保证。
 - `forget` 只清除本机当前插件输出，不能收回发出的请求，不删除原 Pi 会话或其他系统已复制的数据。
-- 词句匹配和角色校验不能证明语义真实。`user` 可能来自 RPC/扩展，即使当前在 TUI，输出仍标记 `humanOrigin: "unverified"`。
+- 词句匹配和角色校验不能证明语义真实。`user` 可能来自 RPC/扩展，无论当前在 TUI 或 RPC，输出仍标记 `humanOrigin: "unverified"`。
 - 提示词限制模型不泛化项目要求、不推断人格等，但不能以自动测试替代真实质量评估。
 
 停用所有实例后，可以删除专属输出目录完成清理；自定义目录请勿误删其他文件。卸载只需移除扩展加载配置。
@@ -117,11 +123,12 @@ npm run schema --workspace=pi-work-insights
 npm run examples --workspace=pi-work-insights
 npx vitest run packages/pi-work-insights/test
 PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:sdk --workspace=pi-work-insights
+PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:rpc --workspace=pi-work-insights
 npm run inspect --workspace=pi-work-insights -- /absolute/path/to/observation.json
 # 或读取项目最新指针指向的正文
 npm run inspect --workspace=pi-work-insights -- /absolute/path/to/project/latest.json
 ```
 
-普通测试只使用合成文本、假模型和临时目录。SDK smoke 使用实际 Pi TypeScript 加载器和 SessionManager，等待真实10秒去抖，验证自动输出、引用来源、去重和清除，不调用真实模型。
+普通测试只使用合成文本、假模型和临时目录。SDK smoke 使用实际 Pi TypeScript 加载器和 SessionManager，等待真实10秒去抖，验证自动输出、引用来源、去重和清除，不调用真实模型。RPC smoke 启动真实 Pi 子进程，使用临时 HOME、合成消息及假 provider；包含真实60秒确认超时和10秒自动提取等待，验证拒绝、迟到确认、暂停撤销、持久授权恢复、门禁与清除，不请求网络。
 
 实现模块：`collector.ts` / `observation-input.ts` 采集，`contract.ts` 定义输出，`extractor.ts` 定义提取提示词和单次调用，`storage.ts` 写文件，`extension.ts` 连接事件与授权。没有新增依赖、数据库或后台服务。
