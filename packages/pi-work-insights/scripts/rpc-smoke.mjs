@@ -8,17 +8,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ObservationStore } from "../dist/src/storage.js";
 
+const automatic = process.argv.includes("--auto");
 const sdk = process.env.PI_SDK_DIR;
 if (!sdk) throw Error("Set PI_SDK_DIR to the installed pi-coding-agent package root");
 const cwd = realpathSync(mkdtempSync(path.join(os.tmpdir(), "insights-rpc-smoke-")));
 const output = path.join(cwd, "output");
 const store = new ObservationStore(output, cwd);
 const children = [];
-function start(optIn = true) {
+function start(optIn = true, auto = false) {
   const args = [path.join(sdk, "dist/cli.js"), "--mode", "rpc", "--no-session", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes",
     "-e", fileURLToPath(new URL("./fixtures/rpc-provider.mjs", import.meta.url)),
     "-e", fileURLToPath(new URL("../src/extension.ts", import.meta.url)),
-    "--provider", "insights-offline", "--model", "fixture", ...(optIn ? ["--work-insights-rpc"] : [])];
+    "--provider", "insights-offline", "--model", "fixture", ...(auto ? ["--work-insights-auto"] : optIn ? ["--work-insights-rpc"] : [])];
   const child = spawn(process.execPath, args, { cwd, env: {
     PATH: process.env.PATH, HOME: cwd, PI_CODING_AGENT_DIR: path.join(cwd, "agent"),
     PI_WORK_INSIGHTS_DIR: output, PI_SKIP_VERSION_CHECK: "1",
@@ -84,6 +85,54 @@ async function stop(client) {
   try { await exited; } finally { clearTimeout(timer); }
 }
 try {
+  if (automatic) {
+    const client = start(true, true); // No --work-insights-rpc or consent-capable host needed.
+    await client.command("get_commands");
+    assert.equal((await client.status()).activation, "host_auto");
+    const settled = client.wait(r => r.type === "agent_settled");
+    await client.prompt("合成用户任务：只验证自动采集，不能使用观察结果。");
+    await settled;
+    await client.wait(r => r.method === "setStatus" && r.statusText?.includes("已输出 JSON"));
+    assert.ok(store.latest());
+    assert.equal((await client.status()).enabled, true);
+    assert.equal(store.settings().attempts.length, 1);
+    await client.prompt("/insights extract");
+    assert.equal(store.settings().attempts.length, 1);
+    assert.ok(!client.records.some(r => r.method === "confirm"));
+    await stop(client);
+
+    const generic = start(false);
+    await generic.command("get_commands");
+    await generic.prompt("/insights extract");
+    assert.ok(generic.records.some(r => r.method === "notify" && r.notifyType === "warning"));
+    await stop(generic);
+    assert.equal(store.settings().attempts.length, 1);
+
+    const paused = start(true, true);
+    assert.equal((await paused.status()).enabled, true);
+    await paused.prompt("/insights pause");
+    assert.equal((await paused.status()).enabled, false);
+    await stop(paused);
+
+    const restarted = start(true, true);
+    await restarted.prompt("/insights extract");
+    assert.equal((await restarted.status()).enabled, false);
+    assert.equal(store.settings().attempts.length, 1);
+    await restarted.prompt("/insights enable"); // Explicit resume has no modal either.
+    assert.equal((await restarted.status()).enabled, true);
+    await restarted.prompt("/insights forget");
+    assert.equal(store.latest(), undefined);
+    assert.equal((await restarted.status()).enabled, false);
+    assert.ok(!restarted.records.some(r => r.method === "confirm"));
+    await stop(restarted);
+
+    const forgotten = start(true, true);
+    await forgotten.prompt("/insights extract");
+    assert.equal((await forgotten.status()).enabled, false);
+    assert.ok(!forgotten.records.some(r => r.method === "confirm"));
+    await stop(forgotten);
+    console.log("Pi automatic RPC smoke passed: first-run output, zero dialogs, dedup, ordinary RPC gate, restart, pause persistence, explicit resume and forget; zero network/model API requests");
+  } else {
   const client = start();
   const commands = await client.command("get_commands");
   assert.ok(commands.data.commands.some(c => c.name === "insights"));
@@ -140,6 +189,7 @@ try {
   assert.equal((await restored.status()).enabled, false);
   await stop(restored);
   console.log("Pi RPC smoke passed: actual JSONL commands, denial, timeout, late consent, pause, automatic output, dedup, restart, capability gate, forget; zero network/model API requests");
+  }
 } finally {
   for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   // Wait for all children before deleting their temporary files.

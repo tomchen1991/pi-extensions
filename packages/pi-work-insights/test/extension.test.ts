@@ -16,14 +16,14 @@ afterEach(() => {
   vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks();
   dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true }));
 });
-function setup(rpc = false) {
+function setup(rpc = false, auto = false) {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const cwd = realpathSync(mkdtempSync(path.join(os.tmpdir(), "pi-observation-extension-")));
   dirs.push(cwd); const base = path.join(cwd, "output"); vi.stubEnv("PI_WORK_INSIGHTS_DIR", base);
   const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
   let command!: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   const api = {
-    registerFlag: vi.fn(), getFlag: () => rpc,
+    registerFlag: vi.fn(), getFlag: (name: string) => name === "work-insights-auto" ? auto : rpc,
     on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(event, handler),
     registerCommand: (name: string, value: { handler: typeof command }) => { expect(name).toBe("insights"); command = value.handler; },
   };
@@ -34,7 +34,7 @@ function setup(rpc = false) {
     cwd, mode: rpc ? "rpc" : "tui", hasUI: true, isIdle: () => true, hasPendingMessages: () => false, model,
     sessionManager: {
       getSessionId: () => "synthetic-session", getSessionFile: () => path.join(cwd, "synthetic.jsonl"),
-      getLeafId: () => rows.at(-1)!.id, getBranch: vi.fn(() => rows),
+      getLeafId: () => rows.at(-1)?.id ?? null, getBranch: vi.fn(() => rows),
     },
     ui: { notify: vi.fn(), setStatus: vi.fn(), confirm: vi.fn(async () => true), getEditorText: vi.fn(() => ""), setEditorText: vi.fn() },
     modelRegistry: {
@@ -132,6 +132,88 @@ describe("automatic observation extension", () => {
     await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
     expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
     expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it.each([false, true])("host automatic mode (RPC=%s) collects without any consent command or dialog", async rpc => {
+    const f = setup(false, true); f.ctx.mode = rpc ? "rpc" : "tui";
+    f.ctx.ui.confirm.mockImplementation(async () => { throw Error("Automatic hosts must never prompt"); });
+    f.emit("session_start");
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.waitOutput();
+    expect(f.store.settings().enabled).toBe(true);
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
+    expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalledTimes(1);
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    await f.run("extract");
+    expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalledTimes(1);
+    if (rpc) {
+      await f.run("status");
+      expect(JSON.parse(f.ctx.ui.notify.mock.calls.at(-1)![0])).toMatchObject({ activation: "host_auto", enabled: true });
+    }
+    await f.run("pause"); f.newInput(); f.emit("session_start");
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.run("extract");
+    expect(f.store.settings().enabled).toBe(false);
+    expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalledTimes(1);
+    await f.run("enable"); // Explicit resume/rebind, still without a dialog.
+    expect(f.store.settings().enabled).toBe(true);
+    await f.run("forget");
+    expect(f.outputs()).toEqual([]); expect(f.store.latest()).toBeUndefined();
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(f.store.settings().enabled).toBe(false);
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
+  });
+  it("automatic mode initializes an empty session without requesting a model", async () => {
+    const f = setup(false, true); f.rows.splice(0);
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    await vi.waitFor(() => expect(f.store.settings().enabled).toBe(true));
+    expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
+  });
+  it.each(["pause", "forget"])("automatic startup respects a persisted %s even before initial activation", async action => {
+    const f = setup(false, true);
+    if (action === "pause") f.store.pause(); else f.store.forget();
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.run("extract");
+    expect(f.store.settings().enabled).toBe(false);
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
+  });
+  it.each(["", "relative/output"])("automatic mode requires an explicit absolute host directory (%s)", async directory => {
+    const f = setup(false, true); vi.stubEnv("PI_WORK_INSIGHTS_DIR", directory);
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.run("extract");
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
+    expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+    expect(existsSync(f.store.directory)).toBe(false);
+    expect(JSON.stringify(f.ctx.ui.notify.mock.calls)).toContain("专属绝对路径");
+  });
+  it("automatic initialization cannot race past another instance's pause", async () => {
+    const f = setup(false, true);
+    const initialize = ObservationStore.prototype.initializeAutomatic;
+    vi.spyOn(ObservationStore.prototype, "initializeAutomatic").mockImplementation(function (this: ObservationStore, destination) {
+      f.store.pause();
+      return initialize.call(this, destination);
+    });
+    f.emit("session_start"); await vi.advanceTimersByTimeAsync(DEBOUNCE_MS); await f.run("extract");
+    expect(f.store.settings().enabled).toBe(false);
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it.each(["json", "print"])("automatic host flag cannot enable collection in %s mode", async mode => {
+    const f = setup(false, true); f.ctx.mode = mode;
+    f.emit("session_start"); await f.run("enable"); await f.run("extract");
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+    expect(existsSync(f.store.directory)).toBe(false);
+    expect(f.ctx.sessionManager.getBranch).not.toHaveBeenCalled();
+    expect(f.ctx.modelRegistry.streamSimple).not.toHaveBeenCalled();
+  });
+  it("automatic mode preserves the pinned model and requires an explicit rebind after routing changes", async () => {
+    const f = setup(false, true);
+    await f.run("extract"); await f.waitOutput();
+    f.ctx.model = { ...model, id: "different-main-model" };
+    f.newInput(); await vi.advanceTimersByTimeAsync(MIN_INTERVAL_MS);
+    f.ctx.modelRegistry.getRegisteredProviderConfig.mockReturnValue({ baseUrl: "https://other.invalid" });
+    await f.run("extract");
+    expect(f.ctx.modelRegistry.streamSimple).toHaveBeenCalledTimes(1);
+    expect(f.store.settings().destination!.model).toBe(model.id);
+    expect(f.ctx.ui.confirm).not.toHaveBeenCalled();
   });
   it("RPC capability opt-in alone does not authorize; explicit consent enables the same outbox", async () => {
     const f = setup(true);

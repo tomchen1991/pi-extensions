@@ -18,8 +18,9 @@ export const SettingsSchema = z.strictObject({
   attempts: z.array(z.strictObject({ at: z.number().int().nonnegative(), observationId: Hash, token: z.uuid() })).max(HOURLY_REQUEST_LIMIT),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
+export const INITIAL_REVISION = "00000000-0000-0000-0000-000000000000";
 export const defaultSettings = (): Settings => ({
-  version: 1, revision: "00000000-0000-0000-0000-000000000000", enabled: false, destination: null, attempts: [],
+  version: 1, revision: INITIAL_REVISION, enabled: false, destination: null, attempts: [],
 });
 /** Bind authorization to configured routing, not merely a display model name. Never persist credentials. */
 export function destinationFor(model: { provider: string; id: string; baseUrl: string }, providerConfig: unknown): Destination {

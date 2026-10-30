@@ -44,6 +44,29 @@ describe("authorization and request budget", () => {
     expect(grant.fingerprint).not.toBe(destinationFor(secretModel, { headers: {} }).fingerprint);
     expect(() => store.reserve(digest("a"), store.settings().revision, destination.fingerprint)).toThrow("NOT_AUTHORIZED");
   });
+  it("automatic initialization pins the first model once and preserves budget across other instances", () => {
+    const store = setup();
+    const first = store.initializeAutomatic(destination);
+    expect(first).toMatchObject({ enabled: true, destination, attempts: [] });
+    const reservation = store.reserve(digest("a"), first.revision, destination.fingerprint);
+    expect(reservation.status).toBe("reserved");
+    const again = new ObservationStore(store.base, "/synthetic/project");
+    const other = destinationFor({ ...model, id: "other-model" }, null);
+    expect(again.initializeAutomatic(other)).toEqual(store.settings());
+    expect(again.settings()).toMatchObject({ revision: first.revision, destination });
+    expect(again.settings().attempts).toHaveLength(1);
+  });
+  it.each(["pause", "forget"])("automatic initialization never overrides %s before or after the first grant", action => {
+    const store = setup();
+    if (action === "pause") store.pause(); else store.forget();
+    const disabled = store.settings();
+    expect(store.initializeAutomatic(destination)).toEqual(disabled);
+    store.authorize(destination, true);
+    if (action === "pause") store.pause(); else store.forget();
+    const stopped = store.settings();
+    expect(store.initializeAutomatic(destination)).toEqual(stopped);
+    expect(store.settings().enabled).toBe(false);
+  });
   it("counts cancelled/failed requests, enforces interval, and persists budget across instances", () => {
     const { store, revision } = granted(); const now = 1_000_000;
     expect(store.reserve(digest("a"), revision, destination.fingerprint, now).status).toBe("reserved");

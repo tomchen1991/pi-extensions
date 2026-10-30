@@ -2,11 +2,12 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { mkdtempSync, realpathSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import { ObservationStore, inspect, observationFilename } from "../dist/src/storage.js";
 import { collect } from "../dist/src/collector.js";
 import { branch, draft, model } from "../dist/test/fixtures/synthetic.js";
+const automatic = process.argv.includes("--auto");
 const base = process.env.PI_SDK_DIR;
 if (!base) throw Error("Set PI_SDK_DIR to the installed pi-coding-agent package root");
 const { SessionManager } = await import(pathToFileURL(path.join(base, "dist/core/session-manager.js")));
@@ -32,6 +33,7 @@ let shutdown = () => {};
 try {
   const loaded = await loadExtensions([fileURLToPath(new URL("../src/extension.ts", import.meta.url))], cwd);
   assert.deepEqual(loaded.errors, []);
+  if (automatic) loaded.runtime.flagValues.set("work-insights-auto", true);
   const plugin = loaded.extensions[0];
   const command = plugin.commands.get("insights");
   assert.ok(command);
@@ -45,7 +47,7 @@ try {
   const ctx = {
     cwd, mode: "tui", sessionManager: sm, isIdle: () => true, hasPendingMessages: () => false, model,
     ui: {
-      confirm: async () => { confirmations++; return true; },
+      confirm: async () => { confirmations++; assert.equal(automatic, false, "Automatic hosts must never prompt"); return true; },
       notify: (...args) => notifications.push(args), setStatus() {}, getEditorText: () => "",
       setEditorText() { assert.fail("Producer must not modify the editor"); },
     },
@@ -62,14 +64,14 @@ try {
   const emit = name => { for (const handler of plugin.handlers.get(name) ?? []) assert.equal(handler({ aborted: false }, ctx), undefined); };
   shutdown = () => emit("session_shutdown");
   assert.equal(calls, 0);
-  await command.handler("enable", ctx);
+  if (!automatic) await command.handler("enable", ctx);
   const store = new ObservationStore(process.env.PI_WORK_INSIGHTS_DIR, cwd);
-  assert.equal(store.settings().enabled, true, JSON.stringify(notifications));
-  emit("agent_settled"); // Must return immediately, not wait for the nested model call.
+  if (!automatic) assert.equal(store.settings().enabled, true, JSON.stringify(notifications));
+  emit(automatic ? "session_start" : "agent_settled"); // Must return immediately, not wait for the nested model call.
   const deadline = Date.now() + 15000;
   let files = [];
   while (Date.now() < deadline) {
-    files = readdirSync(store.outputDirectory).filter(name => name.endsWith(".json"));
+    files = existsSync(store.outputDirectory) ? readdirSync(store.outputDirectory).filter(name => name.endsWith(".json")) : [];
     if (files.length) break;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
@@ -82,15 +84,22 @@ try {
   assert.equal(observation.reviewStatus, "unreviewed");
   assert.equal(observation.preferenceSignals.length, 2);
   assert.equal(observation.evidence[0].humanOrigin, "unverified");
-  assert.equal(confirmations, 1); // No per-record review dialogs.
+  assert.equal(confirmations, automatic ? 0 : 1); // No dialogs at all in host automatic mode.
   await command.handler("extract", ctx);
   assert.equal(calls, 1); // Same input is not sent twice, including manual extraction.
   await command.handler("forget", ctx);
   assert.deepEqual(readdirSync(store.outputDirectory), []);
   assert.equal(store.latest(), undefined);
   assert.equal(store.settings().enabled, false);
+  if (automatic) {
+    emit("session_start");
+    await command.handler("extract", ctx);
+    assert.equal(store.settings().enabled, false); // Restart cannot resurrect a forgotten project.
+    assert.equal(calls, 1);
+    assert.equal(confirmations, 0);
+  }
   assert.equal(sm.getBranch().length, branch.length); // No injected memory, summaries or agent turns.
-  console.log("Pi SDK smoke passed: TS load, edited branch projection, automatic timestamped JSON extraction, latest pointer, provenance, deduplication, forget; zero real model calls");
+  console.log(`Pi SDK smoke passed (${automatic ? "host automatic, zero confirmations" : "interactive consent"}): TS load, edited branch projection, automatic timestamped JSON extraction, latest pointer, provenance, deduplication, forget; zero real model calls`);
 } finally {
   shutdown();
   if (oldDirectory === undefined) delete process.env.PI_WORK_INSIGHTS_DIR;

@@ -15,7 +15,8 @@
     "examples": "node dist/scripts/examples.js",
     "inspect": "node dist/scripts/inspect.js",
     "test:sdk": "npm run build && node scripts/sdk-smoke.mjs",
-    "test:rpc": "npm run build && node scripts/rpc-smoke.mjs"
+    "test:rpc": "npm run build && node scripts/rpc-smoke.mjs",
+    "test:auto": "npm run build && node scripts/sdk-smoke.mjs --auto && node scripts/rpc-smoke.mjs --auto"
   },
   "dependencies": { "zod": "4.6.7" }
 }
