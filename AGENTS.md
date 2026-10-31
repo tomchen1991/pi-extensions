@@ -21,7 +21,9 @@
 | `packages/pi-work-insights/` | 自动生成最近工作、决策、未闭环事项、偏好线索和证据的 JSON；不管理画像、不预测下一句、不对接 backend |
 | `packages/pi-next-prompt/` | 单次生成下一句提示词，显示灰字，由用户接受/编辑后发送 |
 | `packages/pi-collaboration/` | 显式加入的本机协作、broker/CLI、relay 与 DeckZ 兼容入口 |
+| `packages/pi-monitor/` | 默认关闭的 Pi 元数据采集与 WS/WSS 上报；不实现采集中枢、消费端或远程控制 |
 | `docs/pi-work-insights/` | 工作洞察目标及输出语义契约 |
+| `docs/pi-monitor/` | 监控上报协议与独立服务端开发交接 |
 
 未经本次任务明确要求，不扩大这些职责、不新增跨插件集成或改动其他项目。涉及需求边界变化时，先确认需求并同步相应文档，而不是保留互相矛盾的实现说明。
 
@@ -54,7 +56,8 @@
   - 工作洞察：`npx vitest run packages/pi-work-insights/test`
   - 下一句建议：`npx vitest run packages/pi-next-prompt/core.test.ts`
   - 协作：`npx vitest run packages/pi-collaboration`
-- 涉及真实 Pi 加载、会话事件、TUI 或模型接口时，按变更范围运行对应的离线 SDK 冒烟。**根目录 `npm run test:sdk` 只覆盖协作插件**，不覆盖另外两个插件；兼容入口还需 DeckZ 模式。
+  - 监控：`npx vitest run packages/pi-monitor/test`；离线 SDK 冒烟为 `npm run test:sdk --workspace=pi-monitor`
+- 涉及真实 Pi 加载、会话事件、TUI 或模型接口时，按变更范围运行对应的离线 SDK 冒烟。**根目录 `npm run test:sdk` 只覆盖协作插件**，不覆盖其他插件；兼容入口还需 DeckZ 模式。
 - 涉及异步、取消、进程启动或文件发布时，补充故障/竞争回归。等待真实就绪信号并设置明确超时；提前退出及时报错，不靠跳过断言或无界重试掩盖问题。
 - 文档改动至少核对相对链接、文件路径和命令对应的脚本；不必为纯文档变更擅自启动个人 Pi 或付费模型。
 - 如实区分“已通过”“失败”“未运行”“真实效果未验证”。记录失败的具体测试及现象，不未经定位就断言与修改无关；无法运行的验证明确说明原因。
@@ -64,6 +67,7 @@
 - 工作洞察输出以 `src/contract.ts`、`src/storage.ts` 中的运行时定义和 `docs/pi-work-insights/01-contract.md` 为准；调整结构、身份、引用、时间排序或 `latest.json` 语义时同步文档和测试。
 - 更新受控产物：先构建 `pi-work-insights`，再运行其 `schema`、`examples` 脚本，并检查生成结果。不要只手工改 JSON Schema/样例而漏掉源定义。
 - `schema/`、`examples/` 是需要随源定义提交的协议产物，样例必须是合成数据。
+- 监控协议修改同步 `packages/pi-monitor/src/contract.ts`、`docs/pi-monitor/` 与测试；构建后运行 `npm run artifacts --workspace=pi-monitor` 更新 JSON Schema/合成样例。WS 测试 fixture 不是生产服务端，不擅自改变已交接的严格 v1 帧格式。
 - `node_modules/`、`packages/*/dist/`、临时输出和本地 `*.tgz` 不提交；不要为了方便测试把真实输出目录搬进仓库。
 - 不擅自发布 npm、覆盖已交付归档或更新其他项目的 vendor/依赖。包的兼容入口和分发约定见各包 README。
 - 提交前检查 `git diff --check`、暂存文件列表和差异；提交说明与 PR 描述应清楚说明范围、验证结果和限制。
