@@ -71,7 +71,24 @@ try {
     resourceLoader: loader, noTools: "builtin", sessionManager: SessionManager.inMemory(dir), settingsManager: settings,
     customTools: [{ name: "synthetic_tool", label: "Synthetic", description: "Offline fixture", parameters: { type: "object", properties: {} },
       execute: async () => ({ content: [{ type: "text", text: "SECRET_TOOL_OUTPUT" }], details: undefined,
-        usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 } } }) }] }));
+        usage: { input: 2, output: 3, cacheRead: 0, cacheWrite: 0, totalTokens: 5, cost: { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 } } }) },
+      { name: "synthetic_middle", label: "Middle", description: "Offline nested fixture", parameters: { type: "object", properties: {} },
+        execute: async (_id, _args, _signal, _onUpdate, ctx) => {
+          const child = await ctx.executeTool("synthetic_tool", {});
+          assert.equal(child.isError, false);
+          // 仅返回自身用量；子工具用量由 SDK recorder 单独累计。
+          return { content: [{ type: "text", text: "SECRET_MIDDLE_OUTPUT" }], details: undefined,
+            usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3, cost: { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 } } };
+        } },
+      { name: "synthetic_outer", label: "Outer", description: "Offline root fixture",
+        parameters: { type: "object", properties: { ownUsage: { type: "boolean" } }, required: ["ownUsage"] },
+        execute: async (_id, args, _signal, _onUpdate, ctx) => {
+          const child = await ctx.executeTool("synthetic_middle", {});
+          assert.equal(child.isError, false);
+          return { content: [{ type: "text", text: "SECRET_OUTER_OUTPUT" }], details: undefined,
+            ...(args.ownUsage ? { usage: { input: 4, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 9,
+              cost: { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 } } } : {}) };
+        } }] }));
   const extensionErrors = [];
   await session.bindExtensions({ mode: "tui", uiContext: { ...session.extensionRunner.getUIContext(), notify() {}, setStatus() {} },
     onError: error => extensionErrors.push(error) });
@@ -99,6 +116,36 @@ try {
     sdkUsage.map(u => ({ input: u.input, output: u.output, cacheRead: u.cacheRead, cacheWrite: u.cacheWrite, totalTokens: u.totalTokens, reasoning: u.reasoning ?? null })));
   assert.equal(events.find(e => e.type === "pi.tool.finished").data.usage.tokens.totalTokens, 5);
   await until(() => frames.some(f => f.type === "snapshot" && f.state.usage.totalTokens === sdkTokens + 5));
+  for (const ownUsage of [false, true]) {
+    const eventStart = events.length;
+    const settledCount = events.filter(e => e.type === "pi.activity.settled").length;
+    faux.setResponses([
+      fauxAssistantMessage(fauxToolCall("synthetic_outer", { ownUsage }), { stopReason: "toolUse" }),
+      fauxAssistantMessage("SECRET_NESTED_RESPONSE"),
+    ]);
+    await session.prompt("SECRET_NESTED_PROMPT");
+    await until(() => events.filter(e => e.type === "pi.activity.settled").length === settledCount + 1);
+    const nestedEvents = events.slice(eventStart).filter(e => e.type === "pi.tool.finished");
+    assert.equal(nestedEvents.length, 3);
+    assert.deepEqual(nestedEvents.filter(e => e.data.parentToolId !== null).map(e => e.data.usage), [null, null]);
+    const root = nestedEvents.find(e => e.data.parentToolId === null);
+    const sdkResult = session.messages.filter(m => m.role === "toolResult").at(-1);
+    assert.equal(sdkResult.usage.totalTokens, ownUsage ? 17 : 8);
+    const u = sdkResult.usage;
+    assert.deepEqual(root.data.usage.tokens, { input: u.input, output: u.output, cacheRead: u.cacheRead,
+      cacheWrite: u.cacheWrite, totalTokens: u.totalTokens, reasoning: u.reasoning ?? null });
+    assert.equal(root.data.usage.estimatedCost.amount, sdkResult.usage.cost.total);
+    assert.equal(root.data.durationMs, sdkResult.durationMs);
+    const observedMessages = session.messages.filter(m => m.role === "assistant" || m.role === "toolResult").slice(1);
+    const totalTokens = observedMessages.reduce((sum, m) => sum + m.usage.totalTokens, 0);
+    const totalCost = observedMessages.reduce((sum, m) => sum + m.usage.cost.total, 0);
+    await until(() => frames.some(f => f.type === "snapshot" && f.state.usage.totalTokens === totalTokens));
+    const snapshot = frames.filter(f => f.type === "snapshot" && f.state.usage.totalTokens === totalTokens).at(-1);
+    assert.ok(Math.abs(snapshot.state.usage.estimatedCostUSD - totalCost) < 1e-10);
+    assert.equal(snapshot.state.usage.unknownRecords, 0);
+    // 假模型可能使用零价格；未知费用计数应与 SDK 实际记录一致，而非假设免费。
+    assert.equal(snapshot.state.usage.unknownCostRecords, observedMessages.filter(m => !(m.usage.cost.total > 0)).length);
+  }
   const firstEpoch = events[0].collectorEpoch;
   const firstInstance = events[0].source.instanceId;
   assert.ok(!JSON.stringify(frames).includes("SECRET_"));
@@ -141,7 +188,7 @@ try {
   assert.equal(connections, connectionCount, "Disable must survive session replacement/reload in this process");
   assert.deepEqual(extensionErrors, []);
   if (serverFailure) throw serverFailure;
-  console.log("Monitor SDK smoke passed: real loader + agent loop, opt-in, model/tool usage, error/abort, reload identity, no historical recount, disable, content exclusion; zero paid calls");
+  console.log("Monitor SDK smoke passed: real loader + agent loop, opt-in, model/tool usage including multi-depth nested aggregation, error/abort, reload identity, no historical recount, disable, content exclusion; zero paid calls");
 } finally {
   if (session) {
     await session.abort();

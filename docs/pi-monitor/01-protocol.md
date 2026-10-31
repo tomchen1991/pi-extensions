@@ -123,7 +123,7 @@ usage：
 - availability 为 reported/partial/unknown。失败/取消时仍有 SDK 正数用量则 partial；缺失、不合法、totalTokens=0 则 unknown，tokens=null。
 - reasoning 是 output 的子集，不能重复加；totalTokens 保留 SDK 值，不自行改变服务商规范化口径。
 - 零费用无法可靠证明免费；estimatedCost=null。已知正费用也只是 SDK USD 估算。
-- 工具 usage=null 表示该工具未声明可统计的根级用量或它是嵌套子工具，不表示确认免费。根工具已聚合子工具用量，只加一次。
+- 工具 usage=null 表示该工具未声明可统计的根级用量或它是嵌套子工具，不表示确认免费。根工具的 `pi.tool.finished` 在 SDK `toolResult message_start` 合并全部嵌套用量后发布，只加一次；不从更早的根 `tool_execution_end.result` 计量，也不在 `message_end` 重计。嵌套工具仍在各自 `tool_execution_end` 发布完成事件，usage=null。
 - 压缩/分支摘要用量没有可靠模型归属，不强行使用当前选定模型。工具、压缩、分支摘要的粒度不等同于主模型 request。
 - 快照累计 scope 固定为 collector_epoch，只加本周期新观察用量，不回扫历史，不跟随会话树回滚。unknownRecords 包含未知/部分用量记录；unknownCostRecords 表示这些已观察记录中费用未知的数量，**不计完全看不到的调用**。
 - 累计 estimatedCostUSD=0 只表示已知正费用之和为零，必须结合 unknownCostRecords 和覆盖范围解释，不等于实际账单为零。

@@ -82,6 +82,11 @@ describe("content-free lifecycle collector", () => {
     expect(observer.state.usage.totalTokens).toBe(0);
     emit({ type: "tool_execution_end", toolCallId: "a", toolName: "bash", result: { usage, content: secret }, isError: true, durationMs: 10 });
     expect(observer.state.activeTools).toHaveLength(1);
+    expect(observer.state.usage.totalTokens).toBe(0);
+    const result = { role: "toolResult", toolCallId: "a", toolName: "bash", usage, content: secret, isError: true, durationMs: 10 };
+    emit({ type: "message_start", message: result });
+    expect(observer.state.usage.totalTokens).toBe(37);
+    emit({ type: "message_end", message: result });
     expect(observer.state.usage.totalTokens).toBe(37);
     const finished = records.at(-1)!;
     expect(finished.type === "pi.tool.finished" && finished.data.error?.category).toBe("tool_failed");
@@ -89,6 +94,50 @@ describe("content-free lifecycle collector", () => {
     for (let i = 0; i < 100; i++) emit({ type: "tool_execution_start", toolCallId: `c${i}`, toolName: "test", args: {} });
     expect(observer.state.activeTools).toHaveLength(LIMITS.activeTools);
     expect(observer.state.toolsTruncated).toBe(true);
+  });
+
+  it.each([false, true])("counts SDK-finalized nested usage exactly once (root owns usage: %s)", ownUsage => {
+    const { observer, records, emit } = setup();
+    for (const [toolCallId, parentToolCallId] of [["root", undefined], ["root/1", "root"], ["root/1/1", "root/1"]]) {
+      emit({ type: "tool_execution_start", toolCallId, parentToolCallId, toolName: "synthetic", args: { secret } });
+    }
+    for (const [toolCallId, parentToolCallId] of [["root/1/1", "root/1"], ["root/1", "root"]]) {
+      emit({ type: "tool_execution_end", toolCallId, parentToolCallId, toolName: "synthetic", result: { usage, content: secret }, isError: false });
+    }
+    emit({ type: "tool_execution_end", toolCallId: "root", toolName: "synthetic", result: { usage: ownUsage ? usage : undefined }, isError: false });
+    expect(observer.state.usage.totalTokens).toBe(0);
+    expect(records.filter(e => e.type === "pi.tool.finished")).toHaveLength(2);
+    // Pi 在根执行结束之后、message_start 之前才聚合所有深度的嵌套用量。
+    const count = ownUsage ? 3 : 2;
+    const aggregated = { input: usage.input * count, output: usage.output * count, cacheRead: usage.cacheRead * count,
+      cacheWrite: usage.cacheWrite * count, totalTokens: usage.totalTokens * count, cost: { total: usage.cost.total * count } };
+    const result = { role: "toolResult", toolCallId: "root", toolName: "synthetic", usage: aggregated, content: secret, isError: false, durationMs: 17 };
+    emit({ type: "message_start", message: result });
+    emit({ type: "message_end", message: result });
+    const finished = records.filter(e => e.type === "pi.tool.finished");
+    expect(finished).toHaveLength(3);
+    expect(finished.map(e => e.data.usage)).toEqual([null, null, usageMetadata(aggregated)]);
+    expect(finished.at(-1)?.data.durationMs).toBe(17);
+    expect(observer.snapshot().state.usage).toEqual({ scope: "collector_epoch", input: aggregated.input, output: aggregated.output,
+      cacheRead: aggregated.cacheRead, cacheWrite: aggregated.cacheWrite, totalTokens: aggregated.totalTokens,
+      estimatedCostUSD: aggregated.cost.total, unknownRecords: 0, unknownCostRecords: 0 });
+    expect(observer.state.activeToolCount).toBe(0);
+    expect(JSON.stringify(records)).not.toContain(secret);
+  });
+
+  it.each([undefined, { ...usage, totalTokens: 0 }, { ...usage, cost: { total: 0 } }])("preserves missing/unknown tool usage and pricing (%j)", finalUsage => {
+    const { observer, records, emit } = setup();
+    emit({ type: "tool_execution_end", toolCallId: "root", toolName: "synthetic", result: { usage }, isError: true });
+    const result = { role: "toolResult", toolCallId: "root", toolName: "synthetic", usage: finalUsage, isError: true, content: secret };
+    emit({ type: "message_start", message: result });
+    emit({ type: "message_end", message: result });
+    const finished = records.filter(e => e.type === "pi.tool.finished");
+    expect(finished).toHaveLength(1);
+    expect(finished[0]?.data.usage).toEqual(finalUsage ? usageMetadata(finalUsage, true) : null);
+    expect(finished[0]?.data.error?.category).toBe("tool_failed");
+    expect(observer.state.usage.totalTokens).toBe(finalUsage?.totalTokens ? 37 : 0);
+    expect(observer.state.usage.unknownRecords).toBe(finalUsage ? 1 : 0);
+    expect(observer.state.usage.unknownCostRecords).toBe(finalUsage ? 1 : 0);
   });
 
   it("bounds snapshot size even for hostile Unicode/control-character metadata", () => {

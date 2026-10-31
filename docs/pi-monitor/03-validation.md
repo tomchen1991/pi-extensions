@@ -19,6 +19,15 @@
 - 加强 SDK 用量断言后曾失败：假 provider 会根据真实合成上下文重算 usage，覆盖预填 token。已核对其实现，测试改为与 SDK 最终消息逐字段对比，并核对快照累计恰好包含主模型与根工具用量；未跳过断言。
 - 源码核查发现 `ctx.getContextUsage()` 会构建历史投影；已从默认采集移除，测试禁止调用历史/上下文扫描接口。
 
+## 嵌套工具用量修复回归
+
+- 已核实 Pi 1.4.0 在根 `tool_execution_end` 之后、`toolResult message_start` 之前才合并嵌套用量；旧测试给根执行结束事件预填聚合值，未覆盖真实时序。
+- 修前：新增/调整后的 observer 回归有 6 项失败；真实 SDK 冒烟中，无自身用量的根工具最终 SDK 消息包含 8 tokens，但监控完成事件 usage=null。
+- 修后：`npm run build --workspace=pi-monitor`、监控 4 个测试文件 / 32 项测试、`npm test` 全仓构建及 13 个文件 / 189 项测试均通过。
+- `PI_SDK_DIR=<installed SDK package root> npm run test:sdk --workspace=pi-monitor` 通过：使用真实 `ctx.executeTool()` 两层嵌套，分别验证根工具无自身用量（合计 8 tokens）和有自身用量（合计 17 tokens），逐字段核对 SDK 聚合结果、事件和快照累计费用；子工具及 message_end 不重计。
+- 缺失/零用量、未知价格及错误结果的计数有单元回归。SDK 冒烟最初新增的“未知费用为零”断言不成立：假模型使用零价格，已改为逐条根据 SDK 实际费用推导预期数量。
+- 本轮依赖通过 `npm ci --include=dev --offline --ignore-scripts --no-audit --no-fund` 从缓存安装；默认省略开发依赖时曾因缺少 tsc 无法构建，补齐开发依赖后通过。未变更 manifest/lockfile，未请求真实模型或启用真实采集。
+
 ## 依赖审计提示
 
 `npm audit` 报告 3 个受影响包条目（2 moderate / 1 high）：Pi SDK 及其 `minimatch`、`undici` 依赖链。已比对任务前 lockfile：SDK 1.4.0、minimatch 10.2.6、undici 8.10.2 均未改变。此次只新增 monitor 声明及 `@types/ws`，将已有 ws 明确声明为运行依赖；未混入宿主依赖升级。审计问题仍存在，应另行评估兼容升级，不能将测试通过等同于依赖安全。

@@ -112,6 +112,17 @@ export class Observer {
         this.ensureActivity();
         break;
       case "message_start":
+        if (event.message.role === "toolResult") {
+          // Pi 1.4 在此边界前才合并嵌套用量；执行结束事件中的根结果尚未聚合。
+          // 子工具不生成消息，只从根结果累计一次，不在 message_end 再次统计。
+          const message = event.message;
+          const usage = message.usage ? usageMetadata(message.usage, message.isError) : null;
+          if (usage) this.addUsage(usage);
+          this.record("pi.tool.finished", { toolId: this.toolId(message.toolCallId), parentToolId: null,
+            name: label(message.toolName) ?? "unknown", outcome: message.isError ? "error" : "completed", durationMs: duration(message.durationMs),
+            usage, error: message.isError ? { category: "tool_failed", source: "tool", classificationBasis: "sdk_tool_error" } : null });
+          break;
+        }
         if (event.message.role !== "assistant") break;
         this.ensureActivity();
         this.state.requestId = randomUUID();
@@ -165,12 +176,11 @@ export class Observer {
         this.activeTools.delete(toolId);
         this.state.activeToolCount = Math.max(0, this.state.activeToolCount - 1);
         this.state.activeTools = [...this.activeTools.values()];
-        // Root results already aggregate nested usage. Never add both parent and child usage.
-        const usage = !event.parentToolCallId && event.result?.usage ? usageMetadata(event.result.usage, event.isError) : null;
-        if (usage) this.addUsage(usage);
+        // 根工具等待聚合后的 toolResult 消息；嵌套工具仅在此发布生命周期，不累计用量。
+        if (!event.parentToolCallId) break;
         this.record("pi.tool.finished", { toolId, parentToolId: event.parentToolCallId ? this.toolId(event.parentToolCallId) : null,
           name: label(event.toolName) ?? "unknown", outcome: event.isError ? "error" : "completed", durationMs: duration(event.durationMs),
-          usage, error: event.isError ? { category: "tool_failed", source: "tool", classificationBasis: "sdk_tool_error" } : null });
+          usage: null, error: event.isError ? { category: "tool_failed", source: "tool", classificationBasis: "sdk_tool_error" } : null });
         break;
       }
       case "ui_prompt_start":
