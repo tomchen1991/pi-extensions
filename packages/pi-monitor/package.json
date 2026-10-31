@@ -1,0 +1,20 @@
+{
+  "name": "pi-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "description": "Opt-in, content-free Pi telemetry producer over WebSocket",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./src/extension.ts"] },
+  "files": ["src", "dist/src", "schema", "examples", "README.md"],
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
+  "devDependencies": { "@earendil-works/pi-coding-agent": "1.4.0", "@types/ws": "^8.18.2" },
+  "dependencies": { "ws": "^8.22.0", "zod": "4.6.7" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test",
+    "artifacts": "node dist/scripts/artifacts.js",
+    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs"
+  }
+}

@@ -11,6 +11,7 @@ AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动�
 | [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 普通 Pi 默认关闭，须 `/insights enable`；Cocoon 用户 Pi 可由宿主用 `--work-insights-auto` 自动采集、无确认弹窗，可能产生模型费用 |
 | [下一句自动建议](./packages/pi-next-prompt/README.md) | 单次生成下一句提示词，输入框灰字展示，Tab 接受，不自动发送 | 加载后在正常回复结束时使用 `deepseek/deepseek-flash`，每次建议额外调用一次模型 |
 | [PI 协作](./packages/pi-collaboration/README.md) | 普通 Pi 会话显式加入、同组发现、点对点消息与回执；另有 DeckZ 兼容入口 | 启动本地 broker 并通过 CLI 显式加入；relay 本身不调用模型，但接收消息可能唤醒接收方主模型并产生费用 |
+| [PI Monitor](./packages/pi-monitor/README.md) | 采集模型、工作状态、已观测用量与错误元数据，通过 WS/WSS 上报；不实现中枢或消费端 | 默认关闭；配置服务端和设备凭证后显式启用，不调用模型、不采对话正文 |
 
 插件权限等同于运行 Pi 的操作系统用户，不是安全沙箱。真实试用前请阅读各包的数据范围、模型外发、安装及清理说明；“本地保存”不等于“本地推理”。
 
@@ -39,6 +40,9 @@ pi -e ./packages/pi-work-insights/src/extension.ts
 
 # 下一句建议：需配置 DeepSeek；加载后生成建议会调用模型
 pi -e ./packages/pi-next-prompt/extension.mjs
+
+# 监控：仅加载不采集；按包 README 配置服务端后 /monitor enable
+pi -e ./packages/pi-monitor/src/extension.ts
 ```
 
 协作插件需要先构建，然后在不同终端启动 broker 和会话：
@@ -76,7 +80,9 @@ packages/
   pi-work-insights/    # 自动工作观察 JSON 生产者；含源码、Schema、合成样例及测试
   pi-next-prompt/      # 下一句灰字建议，JavaScript 扩展
   pi-collaboration/    # 协作扩展、broker、CLI、共享 relay 与兼容入口
+  pi-monitor/          # 默认关闭的 WS 元数据采集端；Schema、合成样例、离线测试
 docs/pi-work-insights/ # 工作洞察目标和输出契约
+docs/pi-monitor/       # 上报协议与独立 WS 服务端开发交接
 artifacts/            # 本地打包产物目录；*.tgz 默认忽略
 ```
 
@@ -99,6 +105,7 @@ npm run build
 npx vitest run packages/pi-work-insights/test
 npx vitest run packages/pi-next-prompt/core.test.ts
 npx vitest run packages/pi-collaboration
+npx vitest run packages/pi-monitor/test
 ```
 
 ### 真实 SDK 冒烟（模拟模型，无付费模型请求）
@@ -116,6 +123,9 @@ PI_COLLAB_TEST_MODE=deckz npm run test:sdk
 
 # 下一句建议的加载器和编辑器冒烟
 node packages/pi-next-prompt/sdk-test.mjs
+
+# 监控采集端：真实 loader/agent loop、假模型、临时回环 WS fixture
+npm run test:sdk --workspace=pi-monitor
 
 # 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
@@ -139,6 +149,16 @@ npx vitest run packages/pi-work-insights/test
 ```
 
 运行时定义、生成 Schema、合成样例和字段文档应同步更新；产物一致性由测试检查。
+
+### 更新监控协议产物
+
+```sh
+npm run build --workspace=pi-monitor
+npm run artifacts --workspace=pi-monitor
+npx vitest run packages/pi-monitor/test
+```
+
+监控服务端不在本仓库实现。另一个 agent 可按[服务端交接文档](./docs/pi-monitor/02-server-handoff.md)接入；当前离线测试中的 WS fixture 不是生产中枢。
 
 ## 分支与 PR 流程
 
