@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run test",
     "artifacts": "node dist/scripts/artifacts.js",
-    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs"
+    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs",
+    "test:cli": "npm run build && node scripts/cli-smoke.mjs"
   }
 }

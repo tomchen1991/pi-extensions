@@ -57,6 +57,38 @@ describe("bounded authenticated WS producer", () => {
     expect(transport.health().connection).toBe("connected");
   });
 
+  it("flushes a one-shot run stopped before the initial handshake completes", async () => {
+    const received: MonitorEvent[] = [];
+    const { endpoint } = await server(socket => socket.on("message", raw => {
+      const frame = ClientFrameSchema.parse(JSON.parse(raw.toString()));
+      if (frame.type === "hello") ready(socket);
+      if (frame.type === "events") { received.push(...frame.events); ack(socket, frame.events); }
+    }));
+    const transport = client(endpoint);
+    transport.enqueue(exampleEvent());
+    transport.start();
+    expect(transport.health().connection).toBe("connecting");
+    await transport.stop();
+    expect(received.map(event => event.eventId)).toEqual([exampleEvent().eventId]);
+    expect(transport.health().connection).toBe("stopped");
+  });
+
+  it("bounds shutdown while waiting for ready and does not reconnect during shutdown", async () => {
+    let connections = 0;
+    const { endpoint } = await server(socket => {
+      connections++;
+      socket.on("message", () => socket.terminate());
+    });
+    const transport = client(endpoint);
+    transport.enqueue(exampleEvent());
+    transport.start();
+    const started = performance.now();
+    await transport.stop(100);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(connections).toBe(1);
+    expect(transport.health().connection).toBe("stopped");
+  });
+
   it("replays identical event IDs after disconnect before ACK and never removes unsent records", async () => {
     let connections = 0;
     const received: string[] = [];
