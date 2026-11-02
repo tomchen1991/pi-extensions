@@ -146,7 +146,7 @@ export class Transport {
     });
   }
   private schedule(): void {
-    if (this.stopped || this.blocked || this.retry) return;
+    if (this.stopped || this.closing || this.blocked || this.retry) return;
     this.status = "offline";
     const base = this.options.retryBaseMs ?? 500;
     const random = this.options.random ?? Math.random;
@@ -218,7 +218,9 @@ export class Transport {
     this.closing = true;
     if (this.status === "connected") { this.publishSnapshot(); this.flush(); }
     const deadline = Date.now() + deadlineMs;
-    while (this.queue.length && this.status === "connected" && Date.now() < deadline) {
+    // A one-shot CLI may finish before the initial Upgrade/ready exchange. Give the
+    // existing connection the same bounded flush budget; do not start a new one.
+    while (this.queue.length && ["connecting", "handshaking", "connected"].includes(this.status) && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, Math.min(10, Math.max(1, deadline - Date.now()))));
     }
     this.stopped = true;

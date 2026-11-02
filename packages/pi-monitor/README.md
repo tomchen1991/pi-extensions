@@ -40,6 +40,12 @@ pi -e ./packages/pi-monitor/src/extension.ts
 pi -e ./packages/pi-monitor/src/extension.ts --monitor
 ```
 
+单次模式也可使用 `--print --no-session` 或 `--mode json --no-session`；RPC 使用 `--mode rpc --no-session`。Pi 1.4.0 对未知扩展 flag 的初次解析可能吞掉紧邻的普通参数，因此单次 prompt 放在 `--monitor` **之前**，或用 `PI_MONITOR_ENABLED=1` 避免顺序歧义：
+
+```sh
+pi -e ./packages/pi-monitor/src/extension.ts --print --no-session '合成测试任务' --monitor
+```
+
 命令：
 
 - `/monitor status`：显示是否启用、连接状态、缓冲/丢弃计数、固定诊断码；不显示 URL 或凭证。
@@ -101,10 +107,13 @@ npx vitest run packages/pi-monitor/test
 
 # PI_SDK_DIR 指向已安装 SDK 的包根目录；真实加载器/agent loop，假模型，回环 WS fixture
 PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:sdk --workspace=pi-monitor
+
+# 真实 RPC / print / JSON 子进程，均 --no-session；假 provider + 临时回环 WS
+PI_SDK_DIR=/absolute/path/to/pi-coding-agent npm run test:cli --workspace=pi-monitor
 ```
 
 Schema 与合成样例从 `src/contract.ts` / `scripts/fixtures.ts` 生成，测试检查一致性。离线测试服务器只是测试替身，不是交付的采集中枢。
 
 本次已通过和未验证范围见[验证记录](../../docs/pi-monitor/03-validation.md)。
 
-SDK 冒烟覆盖 TUI 模式真实 loader/agent loop、默认关闭、手动开启、主模型及工具用量、错误/中止、reload 身份、历史不重计、disable 和内容排除。普通测试覆盖竞争/故障；RPC/print/JSON 的真实子进程和远程 WSS 部署尚需专门验收。CPU、内存、Mac 电量和真实远程服务端联调未实测，不承诺先前讨论的性能预算已经达成。
+SDK 冒烟覆盖 TUI 模式真实 loader/agent loop、默认关闭、手动开启、主模型及工具用量、错误/中止、reload 身份、历史不重计、disable 和内容排除。普通测试覆盖竞争/故障；CLI 冒烟验证 RPC/print/JSON 的真实子进程默认关闭、flag/env 自动启用、用量、正常退出及 RPC reload/disable，包含瞬时响应在握手前退出的回归。退出仅在原有 250ms 预算内等待当前连接，不保证离线或慢服务端可交付。远程 WSS 部署仍需专门验收。CPU、内存、Mac 电量和真实远程服务端联调未实测，不承诺先前讨论的性能预算已经达成。

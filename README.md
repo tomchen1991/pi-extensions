@@ -127,6 +127,9 @@ node packages/pi-next-prompt/sdk-test.mjs
 # 监控采集端：真实 loader/agent loop、假模型、临时回环 WS fixture
 npm run test:sdk --workspace=pi-monitor
 
+# 监控 RPC / print / JSON 真子进程（--no-session），假 provider + 临时回环 WS
+npm run test:cli --workspace=pi-monitor
+
 # 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
 
