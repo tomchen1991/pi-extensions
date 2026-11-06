@@ -21,6 +21,7 @@
 | `packages/pi-work-insights/` | 自动生成最近工作、决策、未闭环事项、偏好线索和证据的 JSON；不管理画像、不预测下一句、不对接 backend |
 | `packages/pi-next-prompt/` | 单次生成下一句提示词，显示灰字，由用户接受/编辑后发送 |
 | `packages/pi-collaboration/` | 显式加入的本机协作、broker/CLI、relay 与 DeckZ 兼容入口 |
+| `packages/pi-model-fallback/` | Codex 明确额度耗尽后的会话级 OpenAI 官方 API 同 ID 模型切换与续接；不管理认证、不改全局模型或 scoped models |
 | `packages/pi-monitor/` | 默认关闭的 Pi 元数据采集与 WS/WSS 上报；不实现采集中枢、消费端或远程控制 |
 | `docs/pi-work-insights/` | 工作洞察目标及输出语义契约 |
 | `docs/pi-monitor/` | 监控上报协议与独立服务端开发交接 |

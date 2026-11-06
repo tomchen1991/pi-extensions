@@ -1,0 +1,18 @@
+{
+  "name": "pi-model-fallback",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "description": "Session-local Codex subscription quota fallback to the same OpenAI API model",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./src/extension.ts"] },
+  "files": ["src", "dist", "README.md"],
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
+  "devDependencies": { "@earendil-works/pi-coding-agent": "1.4.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test",
+    "test:sdk": "npm run build && node scripts/sdk-smoke.mjs"
+  }
+}
