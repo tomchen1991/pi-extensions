@@ -11,6 +11,7 @@ AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动�
 | [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 普通 Pi 默认关闭，须 `/insights enable`；Cocoon 用户 Pi 可由宿主用 `--work-insights-auto` 自动采集、无确认弹窗，可能产生模型费用 |
 | [下一句自动建议](./packages/pi-next-prompt/README.md) | 单次生成下一句提示词，输入框灰字展示，Tab 接受，不自动发送 | 加载后在正常回复结束时使用 `deepseek/deepseek-flash`，每次建议额外调用一次模型 |
 | [PI 协作](./packages/pi-collaboration/README.md) | 普通 Pi 会话显式加入、同组发现、点对点消息与回执；另有 DeckZ 兼容入口 | 启动本地 broker 并通过 CLI 显式加入；relay 本身不调用模型，但接收消息可能唤醒接收方主模型并产生费用 |
+| [模型额度切换](./packages/pi-model-fallback/README.md) | Codex 明确额度耗尽后，会话级切换到 OpenAI 官方 API 同 ID 模型并续接；无需加入 scoped models，信息不足时不自动切换 | 加载即启用，触发后按 API 计费；使用已有 OpenAI 配置 |
 | [PI Monitor](./packages/pi-monitor/README.md) | 采集模型、工作状态、已观测用量与错误元数据，通过 WS/WSS 上报；不实现中枢或消费端 | 默认关闭；配置服务端和设备凭证后显式启用，不调用模型、不采对话正文 |
 
 插件权限等同于运行 Pi 的操作系统用户，不是安全沙箱。真实试用前请阅读各包的数据范围、模型外发、安装及清理说明；“本地保存”不等于“本地推理”。
@@ -81,6 +82,7 @@ packages/
   pi-next-prompt/      # 下一句灰字建议，JavaScript 扩展
   pi-collaboration/    # 协作扩展、broker、CLI、共享 relay 与兼容入口
   pi-monitor/          # 默认关闭的 WS 元数据采集端；Schema、合成样例、离线测试
+  pi-model-fallback/   # Codex 额度耗尽 → 官方 API 同模型；会话级切换及离线测试
 docs/pi-work-insights/ # 工作洞察目标和输出契约
 docs/pi-monitor/       # 上报协议与独立 WS 服务端开发交接
 artifacts/            # 本地打包产物目录；*.tgz 默认忽略
@@ -129,6 +131,9 @@ npm run test:sdk --workspace=pi-monitor
 
 # 监控 RPC / print / JSON 真子进程（--no-session），假 provider + 临时回环 WS
 npm run test:cli --workspace=pi-monitor
+
+# 额度切换：真实 SDK + 假模型，无真实 API 调用
+npm run test:sdk --workspace=pi-model-fallback
 
 # 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
