@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "0.1",
+  "observationId": "c0865cdb270cd297b653d5048b4321867a21be49231b1b35e171bfd57d7dea6a",
+  "reviewStatus": "unreviewed",
+  "source": {
+    "producer": "pi-work-insights",
+    "projectRef": "eb1c8f905552df807f14f14b4736cf9f49d1b716133f0a4f0220694e4e82d6d2",
+    "sessionRef": "b159b5d8d93006ad63aff6a4e17e1b2971874d06ea5edc443ca084cb65517e81",
+    "branchRef": "u4",
+    "observedAt": "2026-01-01T00:00:00.000Z",
+    "inputDigest": "2ded7a0614b810286e4e7e6b25dcd88f1c20a335d3b2d21e10142b3ab58f513b",
+    "entryRefs": [
+      "u1",
+      "a1",
+      "u2",
+      "u3",
+      "a2",
+      "u4"
+    ],
+    "coverage": "complete",
+    "omissionReasons": []
+  },
+  "extraction": {
+    "provider": "mock",
+    "model": "fixture",
+    "extractorVersion": "work-observation-v1",
+    "destinationRef": "3cbb809097a13d4ef7088fe269752e2912f67ea09af0b20c28a374f9cc9c730d",
+    "inputTokens": 800,
+    "outputTokens": 500
+  },
+  "recentWork": [
+    {
+      "id": "work-1",
+      "topic": "优化订单查询",
+      "goal": "方便运营查订单",
+      "context": "内部运营系统，先做可用版本",
+      "progress": "助手报告查询接口修改完成，手机端尚未验收",
+      "status": "in_progress",
+      "verification": "assistant_reported",
+      "evidenceIds": [
+        "e1",
+        "e3",
+        "e5"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "decision-1",
+      "workRef": "work-1",
+      "choice": "暂时使用现有 SQLite，不引入 Redis",
+      "reason": "减少部署复杂度",
+      "scope": "project",
+      "temporary": true,
+      "evidenceIds": [
+        "e2"
+      ]
+    }
+  ],
+  "openLoops": [
+    {
+      "id": "loop-1",
+      "workRef": "work-1",
+      "description": "手机端尚待验收",
+      "kind": "pending_validation",
+      "origin": "user_explicit",
+      "evidenceIds": [
+        "e3"
+      ]
+    }
+  ],
+  "preferenceSignals": [
+    {
+      "id": "signal-1",
+      "category": "prompting",
+      "aspect": "response_detail",
+      "condition": "汇报结果时",
+      "preference": "简短说明结果、验证情况和遗留问题",
+      "scope": "user_candidate",
+      "basis": "explicit_statement",
+      "evidenceIds": [
+        "e4"
+      ]
+    },
+    {
+      "id": "signal-2",
+      "category": "collaboration",
+      "aspect": "execution_order",
+      "condition": "这个项目涉及大改时",
+      "preference": "先讨论方案，不直接改代码",
+      "scope": "project",
+      "basis": "explicit_statement",
+      "evidenceIds": [
+        "e3"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e1",
+      "entryRef": "u1",
+      "quote": "这是内部运营用的订单查询系统，先做可用版本，方便运营查订单。",
+      "role": "user",
+      "humanOrigin": "unverified"
+    },
+    {
+      "id": "e2",
+      "entryRef": "u2",
+      "quote": "暂时不用 Redis，先用现有 SQLite，减少部署复杂度。",
+      "role": "user",
+      "humanOrigin": "unverified"
+    },
+    {
+      "id": "e3",
+      "entryRef": "u3",
+      "quote": "手机端还没验收。这个项目大改前先讨论方案，不要直接改代码。",
+      "role": "user",
+      "humanOrigin": "unverified"
+    },
+    {
+      "id": "e4",
+      "entryRef": "u4",
+      "quote": "以后汇报简短说明结果、验证情况和遗留问题。",
+      "role": "user",
+      "humanOrigin": "unverified"
+    },
+    {
+      "id": "e5",
+      "entryRef": "a2",
+      "quote": "查询接口修改完成。",
+      "role": "assistant",
+      "humanOrigin": "not_applicable"
+    }
+  ]
+}

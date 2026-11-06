@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "0.1",
+  "observationId": "bbb9d4111f3f983baeab16c5e7cfb038a35a14831f75a50bed67846066a28556",
+  "reviewStatus": "unreviewed",
+  "source": {
+    "producer": "pi-work-insights",
+    "projectRef": "eb1c8f905552df807f14f14b4736cf9f49d1b716133f0a4f0220694e4e82d6d2",
+    "sessionRef": "b159b5d8d93006ad63aff6a4e17e1b2971874d06ea5edc443ca084cb65517e81",
+    "branchRef": "u0",
+    "observedAt": "2026-01-01T00:00:00.000Z",
+    "inputDigest": "b9f5048844b5e8b605fc2bcb44c0f5d0f2d11ed92322b470056d7a59fe761e7d",
+    "entryRefs": [
+      "u0"
+    ],
+    "coverage": "complete",
+    "omissionReasons": []
+  },
+  "extraction": {
+    "provider": "mock",
+    "model": "fixture",
+    "extractorVersion": "work-observation-v1",
+    "destinationRef": "3cbb809097a13d4ef7088fe269752e2912f67ea09af0b20c28a374f9cc9c730d",
+    "inputTokens": 800,
+    "outputTokens": 500
+  },
+  "recentWork": [],
+  "decisions": [],
+  "openLoops": [],
+  "preferenceSignals": [],
+  "evidence": []
+}

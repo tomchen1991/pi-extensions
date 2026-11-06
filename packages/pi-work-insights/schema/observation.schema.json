@@ -1,0 +1,505 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "observationId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reviewStatus": {
+      "type": "string",
+      "const": "unreviewed"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "producer": {
+          "type": "string",
+          "const": "pi-work-insights"
+        },
+        "projectRef": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sessionRef": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "branchRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "entryRefs": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "coverage": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "omissionReasons": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        }
+      },
+      "required": [
+        "producer",
+        "projectRef",
+        "sessionRef",
+        "branchRef",
+        "observedAt",
+        "inputDigest",
+        "entryRefs",
+        "coverage",
+        "omissionReasons"
+      ],
+      "additionalProperties": false
+    },
+    "extraction": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "extractorVersion": {
+          "type": "string",
+          "const": "work-observation-v1"
+        },
+        "destinationRef": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "extractorVersion",
+        "destinationRef",
+        "inputTokens",
+        "outputTokens"
+      ],
+      "additionalProperties": false
+    },
+    "recentWork": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "in_progress",
+              "blocked",
+              "reported_done",
+              "unknown"
+            ]
+          },
+          "verification": {
+            "type": "string",
+            "enum": [
+              "user_reported",
+              "assistant_reported",
+              "tool_observed",
+              "unknown"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "topic",
+          "goal",
+          "context",
+          "progress",
+          "status",
+          "verification",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "decisions": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "workRef": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "task",
+              "project"
+            ]
+          },
+          "temporary": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "workRef",
+          "choice",
+          "reason",
+          "scope",
+          "temporary",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openLoops": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "workRef": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "unfinished",
+              "pending_validation",
+              "blocked",
+              "waiting_for_user",
+              "next_step"
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "user_explicit",
+              "assistant_proposed",
+              "inferred"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "workRef",
+          "description",
+          "kind",
+          "origin",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "preferenceSignals": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "prompting",
+              "collaboration",
+              "workflow"
+            ]
+          },
+          "aspect": {
+            "type": "string",
+            "enum": [
+              "input_style",
+              "response_detail",
+              "response_format",
+              "execution_order",
+              "change_scope",
+              "confirmation_boundary",
+              "verification_style",
+              "tooling",
+              "other"
+            ]
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "task",
+              "project",
+              "user_candidate"
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "explicit_statement",
+              "observed_pattern"
+            ]
+          },
+          "evidenceIds": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "aspect",
+          "condition",
+          "preference",
+          "scope",
+          "basis",
+          "evidenceIds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "entryRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "tool"
+            ]
+          },
+          "humanOrigin": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "not_applicable"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "entryRef",
+          "quote",
+          "role",
+          "humanOrigin"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "observationId",
+    "reviewStatus",
+    "source",
+    "extraction",
+    "recentWork",
+    "decisions",
+    "openLoops",
+    "preferenceSignals",
+    "evidence"
+  ],
+  "additionalProperties": false
+}
