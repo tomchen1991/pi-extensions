@@ -5,7 +5,7 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run build && vitest run",
-    "test:sdk": "npm run build && node packages/pi-collaboration/tests/sdk.mjs"
+    "test:sdk": "npm run build && npm run test:sdk --workspace=pi-model-fallback"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
