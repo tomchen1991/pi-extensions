@@ -47,7 +47,7 @@ Git 提供数字，LLM 仅负责解释，没有工具执行权限。没有读取
 - 仅以 Pi `ctx.cwd` 所在仓库为准，不跟踪 Bash 的临时 `cd`。只支持 origin 作为主远端；不支持未产生首次提交的仓库。无 UI 的 print/JSON 模式不执行，TUI/RPC 需要支持 Pi 的 confirm/select 协议。
 - fetch 和默认分支查询使用已有 Git 身份访问远端，可能触发既有凭证助手；插件不读取认证文件。Git 自身的配置、hooks、传输程序仍按现有用户权限运行。
 - LLM 确认外发范围包括分支/文件路径、提交说明和 tracked diff，可能包含密钥或私有代码，**没有完整脱敏保证**，可能产生模型费用。普通 status 命令在确认前已在内存收集 diff，但不会发送模型。模型总结失败仍保留已展示的 Git 事实。
-- stash 不包含 ignored 文件；拒绝进行中的 merge/rebase/cherry-pick 等操作、冲突和含子模块的仓库；其他 worktree 占用分支等由 Git 拒绝。不要依赖 stash 充当完整备份。
+- stash 不包含 ignored 文件；切换分支及 fast-forward 更新均使用 `--no-overwrite-ignore`，遇到会覆盖 ignored 本地文件的路径冲突时拒绝操作，不删除这些文件。失败后可能已保留 stash 或停在默认分支，请按上文核对实际状态。拒绝进行中的 merge/rebase/cherry-pick 等操作、冲突和含子模块的仓库；其他 worktree 占用分支等由 Git 拒绝。不要依赖 stash 充当完整备份。
 - 操作前后检查分支、HEAD、状态；确认期间还比较 tracked diff 指纹和未跟踪文件元数据。大 diff 超过单命令限制时回主分支操作拒绝执行。不是跨进程事务锁：**请勿同时通过编辑器、其他 Pi 或 Git 进程修改同一仓库**。
 - 插件内并发命令拒绝执行；agent 忙碌时拒绝操作。单个 Git 命令限时 30 秒、stdout/stderr 各最多 256 KiB；整体操作限时 180 秒，单次模型输出最多 1600 token。会话关闭中止在途操作。无自动重试、自动提交或自动清理。
 - 插件不是安全沙箱；仓库数据和 LLM 建议均不是执行授权。真实模型质量和终端视觉效果未验证。

@@ -78,6 +78,36 @@ describe("Git commands using temporary repositories only", () => {
     await git.returnMain(await git.state(cwd), target, false);
     expect(g(["rev-parse", "HEAD"])).toBe(target.oid); expect(readFileSync(join(cwd, "remote-only"), "utf8")).toBe("new remote commit");
   });
+  it.each([true, false])("preserves ignored files when switching would overwrite them (local default exists: %s)", async local => {
+    const { cwd, g } = fixture(); const git = new Git();
+    g(["rm", "file"]); g(["commit", "-m", "remove tracked file on task"]);
+    writeFileSync(join(cwd, ".git", "info", "exclude"), "file\n");
+    writeFileSync(join(cwd, "file"), "local ignored copy\n");
+    if (!local) g(["branch", "-D", "main"]);
+    const state = await git.state(cwd); state.signature = await git.signature(state);
+    expect(state.dirty).toBe(false);
+    await expect(git.returnMain(state, await git.target(cwd), false)).rejects.toThrow("Git 操作失败：switch");
+    expect(readFileSync(join(cwd, "file"), "utf8")).toBe("local ignored copy\n");
+    expect((await git.state(cwd)).branch).toBe("feat/test");
+    expect(g(["stash", "list"])).toBe("");
+  });
+  it("preserves ignored files when the fast-forward would overwrite them", async () => {
+    const { cwd, g, remote } = fixture(); const git = new Git();
+    writeFileSync(join(cwd, ".git", "info", "exclude"), "notes.local\n");
+    writeFileSync(join(cwd, "notes.local"), "local ignored copy\n");
+    const other = join(cwd, "..", "other"); g(["clone", remote, other]);
+    g(["config", "user.name", "Synthetic"], other); g(["config", "user.email", "test@example.invalid"], other);
+    writeFileSync(join(other, "notes.local"), "remote tracked copy\n");
+    g(["add", "."], other); g(["commit", "-m", "track previously ignored path"], other); g(["push"], other);
+    await git.fetch(cwd); const target = await git.target(cwd);
+    const state = await git.state(cwd); state.signature = await git.signature(state);
+    expect(state.dirty).toBe(false);
+    await expect(git.returnMain(state, target, false)).rejects.toThrow("Git 操作失败：-c");
+    expect(readFileSync(join(cwd, "notes.local"), "utf8")).toBe("local ignored copy\n");
+    const after = await git.state(cwd);
+    expect(after.branch).toBe("main"); expect(after.oid).toBe(state.oid); expect(after.dirty).toBe(false);
+    expect(g(["stash", "list"])).toBe("");
+  });
   it("creates a local default branch when only its remote ref exists", async () => {
     const { cwd, g } = fixture(); g(["branch", "-D", "main"]); const git = new Git();
     await git.returnMain(await git.state(cwd), await git.target(cwd), false);

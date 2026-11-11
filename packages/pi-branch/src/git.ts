@@ -132,9 +132,10 @@ export class Git {
       }
       const clean = await this.state(current.root, signal);
       if (clean.dirty || clean.oid !== before.oid || clean.branch !== before.branch) throw new GitError("工作区未清空或分支已变化，停止切换。");
-      if (local) await this.command(current.root, ["switch", "--no-guess", target.branch], signal);
-      else await this.command(current.root, ["switch", "--track", "-c", target.branch, target.ref], signal);
-      await this.command(current.root, ["-c", "merge.autoStash=false", "merge", "--ff-only", target.oid], signal);
+      // ignored 文件不在状态指纹或 stash 中，切换和更新均须由 Git 拒绝覆盖。
+      if (local) await this.command(current.root, ["switch", "--no-overwrite-ignore", "--no-guess", target.branch], signal);
+      else await this.command(current.root, ["switch", "--no-overwrite-ignore", "--track", "-c", target.branch, target.ref], signal);
+      await this.command(current.root, ["-c", "merge.autoStash=false", "merge", "--ff-only", "--no-overwrite-ignore", target.oid], signal);
       const after = await this.state(current.root, signal);
       if (after.branch !== target.branch || after.oid !== target.oid || after.dirty) throw new GitError("最终状态与预期不一致，请手动核对。");
       return `已回到 ${target.branch} 并 fast-forward 到 ${target.oid.slice(0, 12)}（本次 fetch 快照）。原任务分支未删除。${saved ? `\nstash 已保留：${saved}；回原分支核对后可 git stash apply --index ${saved}，不自动恢复或删除。` : ""}`;
