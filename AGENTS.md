@@ -21,6 +21,7 @@
 | `packages/pi-work-insights/` | 自动生成最近工作、决策、未闭环事项、偏好线索和证据的 JSON；不管理画像、不预测下一句、不对接 backend |
 | `packages/pi-next-prompt/` | 单次生成下一句提示词，显示灰字，由用户接受/编辑后发送 |
 | `packages/pi-model-fallback/` | Codex 明确额度耗尽后的会话级 OpenAI 官方 API 同 ID 模型切换与续接；不管理认证、不改全局模型或 scoped models |
+| `packages/pi-codex-accounts/` | 按 Git 仓库手动选择两个用户级 ChatGPT OAuth 登录槽位；复用宿主认证、不复制默认登录、不做额度轮换或自动续发 |
 | `docs/pi-work-insights/` | 工作洞察目标及输出语义契约 |
 
 协作与监控属于 Cocoon 侧能力，不在本仓库维护。不要在这里重新加回它们的插件或协议文档；宿主如何接入工作洞察由宿主项目负责，本仓库只维护插件接口与契约，不能凭其他仓库的旧提交猜测其当前实现。
@@ -56,7 +57,8 @@
   - 工作洞察：`npx vitest run packages/pi-work-insights/test`
   - 下一句建议：`npx vitest run packages/pi-next-prompt/core.test.ts`
   - 额度切换：`npx vitest run packages/pi-model-fallback/test`；离线 SDK 冒烟为 `npm run test:sdk --workspace=pi-model-fallback`
-- 涉及真实 Pi 加载、会话事件、TUI 或模型接口时，按变更范围运行对应的离线 SDK 冒烟。**根目录 `npm run test:sdk` 只覆盖额度切换插件**，不覆盖工作洞察和下一句建议；工作洞察使用其包内 `test:sdk` / `test:rpc` / `test:auto`，下一句建议使用 `node packages/pi-next-prompt/sdk-test.mjs`。
+  - 账号选择：`npx vitest run packages/pi-codex-accounts/test`；离线 SDK 冒烟为 `npm run test:sdk --workspace=pi-codex-accounts`（仅假 OAuth，不运行真实登录）
+- 涉及真实 Pi 加载、会话事件、TUI 或模型接口时，按变更范围运行对应的离线 SDK 冒烟。**根目录 `npm run test:sdk` 只覆盖额度切换插件**，不覆盖工作洞察、下一句建议和账号选择；账号选择使用其包内 `test:sdk`，工作洞察使用其包内 `test:sdk` / `test:rpc` / `test:auto`，下一句建议使用 `node packages/pi-next-prompt/sdk-test.mjs`。
 - 涉及异步、取消、进程启动或文件发布时，补充故障/竞争回归。等待真实就绪信号并设置明确超时；提前退出及时报错，不靠跳过断言或无界重试掩盖问题。
 - 文档改动至少核对相对链接、文件路径和命令对应的脚本；不必为纯文档变更擅自启动个人 Pi 或付费模型。
 - 如实区分“已通过”“失败”“未运行”“真实效果未验证”。记录失败的具体测试及现象，不未经定位就断言与修改无关；无法运行的验证明确说明原因。

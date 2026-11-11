@@ -2,7 +2,7 @@
 
 独立维护的 Pi 插件工作区，使用 npm workspaces。每个插件拥有独立 manifest、入口和说明；当前均为私有包，尚未发布 npm。不依赖 Cocoon/Electron，也不会因运行仓库测试而自动安装到个人 Pi。
 
-本仓库保留可独立使用的公共插件：工作洞察、下一句建议和模型额度切换。协作和监控不在本仓库维护，属于 Cocoon 侧能力；本仓库不提供 Cocoon/Electron 宿主实现。
+本仓库保留可独立使用的公共插件：工作洞察、下一句建议、模型额度切换和仓库级 Codex 账号选择。协作和监控不在本仓库维护，属于 Cocoon 侧能力；本仓库不提供 Cocoon/Electron 宿主实现。
 
 AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动通过独立分支和 PR 合并，禁止直接推送 `main`。
 
@@ -13,6 +13,7 @@ AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动�
 | [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 普通 Pi 默认关闭，须 `/insights enable` 并确认；宿主可选用 `--work-insights-auto` 自动采集、无确认弹窗，可能产生模型费用 |
 | [下一句自动建议](./packages/pi-next-prompt/README.md) | 单次生成下一句提示词，输入框灰字展示，Tab 接受，不自动发送 | 加载后在正常回复结束时使用 `deepseek/deepseek-flash`，每次建议额外调用一次模型 |
 | [模型额度切换](./packages/pi-model-fallback/README.md) | Codex 明确额度耗尽后，会话级切换到 OpenAI 官方 API 同 ID 模型并续接；无需加入 scoped models，信息不足时不自动切换 | 加载即启用，触发后按 API 计费；使用已有 OpenAI 配置 |
+| [Codex 账号选择](./packages/pi-codex-accounts/README.md) | 按 Git 仓库手动选择 personal/work 两个 ChatGPT OAuth 登录槽位；凭证留在用户级存储，不做额度轮换 | 两个槽位分别 `/login` 后，用 `/codex-account` 选择；不保证使用方式符合 OpenAI 条款 |
 
 插件权限等同于运行 Pi 的操作系统用户，不是安全沙箱。真实试用前请阅读各包的数据范围、模型外发、安装及清理说明；“本地保存”不等于“本地推理”。
 
@@ -44,6 +45,9 @@ pi -e ./packages/pi-next-prompt/extension.mjs
 
 # 额度切换：加载即可能在 Codex 额度耗尽后按 OpenAI API 计费
 pi -e ./packages/pi-model-fallback/src/extension.ts
+
+# 仓库账号选择：另行登录两个槽位，再用 /codex-account 手动选择
+pi -e ./packages/pi-codex-accounts/src/extension.ts
 ```
 
 ### 持久安装（用户按需执行）
@@ -54,6 +58,7 @@ pi -e ./packages/pi-model-fallback/src/extension.ts
 pi install ./packages/pi-work-insights
 pi install ./packages/pi-next-prompt
 pi install ./packages/pi-model-fallback
+pi install ./packages/pi-codex-accounts
 pi list
 ```
 
@@ -68,6 +73,7 @@ packages/
   pi-work-insights/    # 自动工作观察 JSON 生产者；含源码、Schema、合成样例及测试
   pi-next-prompt/      # 下一句灰字建议，JavaScript 扩展
   pi-model-fallback/   # Codex 额度耗尽 → 官方 API 同模型；会话级切换及离线测试
+  pi-codex-accounts/   # 仓库级手动选择 ChatGPT OAuth 账号；不自动轮换
 docs/pi-work-insights/ # 工作洞察目标和输出契约
 artifacts/             # 本地打包产物目录；*.tgz 默认忽略
 ```
@@ -91,6 +97,7 @@ npm run build
 npx vitest run packages/pi-work-insights/test
 npx vitest run packages/pi-next-prompt/core.test.ts
 npx vitest run packages/pi-model-fallback/test
+npx vitest run packages/pi-codex-accounts/test
 ```
 
 ### 真实 SDK 冒烟（模拟模型，无付费模型请求）
@@ -108,6 +115,9 @@ node packages/pi-next-prompt/sdk-test.mjs
 
 # 额度切换：真实 SDK + 假模型，无真实 API 调用
 npm run test:sdk --workspace=pi-model-fallback
+
+# 账号选择：真实加载器、假 OAuth/模型、临时凭证存储，不登录真实账号
+npm run test:sdk --workspace=pi-codex-accounts
 
 # 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
