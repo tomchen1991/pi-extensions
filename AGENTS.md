@@ -18,6 +18,7 @@
 
 | 目录 | 当前职责 |
 | --- | --- |
+| `packages/pi-token-usage/` | 只采集加载后主 Agent 新响应的三类 Tokens（缓存输入、非缓存输入、输出）及项目、实际模型/供应商、UTC 精确时间；不存会话维度、不做报表/看板/数据库接入或历史回填 |
 | `packages/pi-work-insights/` | 自动生成最近工作、决策、未闭环事项、偏好线索和证据的 JSON；不管理画像、不预测下一句、不对接 backend |
 | `packages/pi-next-prompt/` | 单次生成下一句提示词，显示灰字，由用户接受/编辑后发送 |
 | `packages/pi-model-fallback/` | Codex 明确额度耗尽后的会话级 OpenAI 官方 API 同 ID 模型切换与续接；不管理认证、不改全局模型或 scoped models |
@@ -55,6 +56,7 @@
 - 安装依赖使用 `npm ci`；改依赖时才同步相应 manifest 和根锁文件，避免无关升级。
 - `npm test` 先构建所有包，再运行全仓 Vitest。定向测试前也要构建其依赖的 `dist/`，避免测到过期 JavaScript。
 - 常用定向入口：
+  - Token 采集：`npx vitest run packages/pi-token-usage/test`；离线 SDK 冒烟为 `npm run test:sdk --workspace=pi-token-usage`（仅合成消息、假模型和临时输出）
   - 工作洞察：`npx vitest run packages/pi-work-insights/test`
   - 下一句建议：`npx vitest run packages/pi-next-prompt/core.test.ts`
   - 额度切换：`npx vitest run packages/pi-model-fallback/test`；离线 SDK 冒烟为 `npm run test:sdk --workspace=pi-model-fallback`
@@ -67,6 +69,7 @@
 
 ## 6. 协议、生成文件与提交范围
 
+- Token 采集 v1 契约以 `packages/pi-token-usage/src/record.ts` 和包内 README 为准；改三类计数、项目身份、完成时间/小时桶或原子发布语义须同步测试和文档，不擅自增加会话/正文采集或数据库对接。
 - 工作洞察输出以 `src/contract.ts`、`src/storage.ts` 中的运行时定义和 `docs/pi-work-insights/01-contract.md` 为准；调整结构、身份、引用、时间排序或 `latest.json` 语义时同步文档和测试。
 - 更新受控产物：先构建 `pi-work-insights`，再运行其 `schema`、`examples` 脚本，并检查生成结果。不要只手工改 JSON Schema/样例而漏掉源定义。
 - `schema/`、`examples/` 是需要随源定义提交的协议产物，样例必须是合成数据。
