@@ -2,7 +2,7 @@
 
 独立维护的 Pi 插件工作区，使用 npm workspaces。每个插件拥有独立 manifest、入口和说明；当前均为私有包，尚未发布 npm。不依赖 Cocoon/Electron，也不会因运行仓库测试而自动安装到个人 Pi。
 
-本仓库保留可独立使用的公共插件：工作洞察、下一句建议、模型额度切换、仓库级 Codex 账号选择和命令式分支助手。协作和监控不在本仓库维护，属于 Cocoon 侧能力；本仓库不提供 Cocoon/Electron 宿主实现。
+本仓库保留可独立使用的公共插件：工作洞察、下一句建议、模型额度切换、仓库级 Codex 账号选择、命令式分支助手和 Token 用量采集。协作和监控不在本仓库维护，属于 Cocoon 侧能力；本仓库不提供 Cocoon/Electron 宿主实现。
 
 AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动通过独立分支和 PR 合并，禁止直接推送 `main`。
 
@@ -10,6 +10,7 @@ AI 编码助手开始工作前请阅读 [AGENTS.md](./AGENTS.md)。所有改动�
 
 | 插件 | 职责 | 开启方式与成本 |
 | --- | --- | --- |
+| [Token 用量采集](./packages/pi-token-usage/README.md) | 采集新响应的缓存输入、非缓存输入、输出 Tokens，按项目、实际模型/供应商和 UTC 时间落盘；不做报表或数据库接入 | 加载即本地采集，不额外调用模型；保存项目路径，不存会话 ID 或消息正文 |
 | [PI 工作洞察](./packages/pi-work-insights/README.md) | 输出最近工作、决策、未闭环事项、提示词/协作偏好线索与短引用的 JSON；不负责画像、推荐或 backend 使用 | 普通 Pi 默认关闭，须 `/insights enable` 并确认；宿主可选用 `--work-insights-auto` 自动采集、无确认弹窗，可能产生模型费用 |
 | [下一句自动建议](./packages/pi-next-prompt/README.md) | 单次生成下一句提示词，输入框灰字展示，Tab 接受，不自动发送 | 加载后在正常回复结束时使用 `deepseek/deepseek-flash`，每次建议额外调用一次模型 |
 | [模型额度切换](./packages/pi-model-fallback/README.md) | Codex 明确额度耗尽后，会话级切换到 OpenAI 官方 API 同 ID 模型并续接；无需加入 scoped models，信息不足时不自动切换 | 加载即启用，触发后按 API 计费；使用已有 OpenAI 配置 |
@@ -38,6 +39,9 @@ npm run build
 按需选择一个入口，不必全部加载：
 
 ```sh
+# Token 采集：加载后只记录新响应，不扫描历史会话
+pi -e ./packages/pi-token-usage/src/extension.ts
+
 # 工作洞察：进入 Pi 后用 /insights enable 明确授权，再开始自动提取
 pi -e ./packages/pi-work-insights/src/extension.ts
 
@@ -75,6 +79,7 @@ pi list
 
 ```text
 packages/
+  pi-token-usage/      # 只采集新响应的三类 Tokens 与项目/模型/供应商/精确时间
   pi-work-insights/    # 自动工作观察 JSON 生产者；含源码、Schema、合成样例及测试
   pi-next-prompt/      # 下一句灰字建议，JavaScript 扩展
   pi-model-fallback/   # Codex 额度耗尽 → 官方 API 同模型；会话级切换及离线测试
@@ -104,6 +109,7 @@ npx vitest run packages/pi-work-insights/test
 npx vitest run packages/pi-next-prompt/core.test.ts
 npx vitest run packages/pi-model-fallback/test
 npx vitest run packages/pi-codex-accounts/test
+npx vitest run packages/pi-token-usage/test
 npx vitest run packages/pi-branch/test
 ```
 
@@ -128,6 +134,9 @@ npm run test:sdk --workspace=pi-branch
 
 # 账号选择：真实加载器、假 OAuth/模型、临时凭证存储，不登录真实账号
 npm run test:sdk --workspace=pi-codex-accounts
+
+# Token 采集：真实加载器 + 假模型 + 临时输出，不扫描个人会话
+npm run test:sdk --workspace=pi-token-usage
 
 # 工作洞察的 TUI 加载、自动提取、最新指针与去重冒烟；含真实10秒去抖等待
 npm run test:sdk --workspace=pi-work-insights
